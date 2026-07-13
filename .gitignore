@@ -7,3 +7,4 @@ out
 public/search-index.json
 next-env.d.ts
 .vercel
+tsconfig.tsbuildinfo

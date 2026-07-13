@@ -1,0 +1,198 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 40%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 94%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 142 71% 35%;
+    --success-foreground: 210 40% 98%;
+    --warning: 38 92% 45%;
+    --warning-foreground: 210 40% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 217 91% 40%;
+    --radius: 0.65rem;
+
+    --viz-1: #2a78d6;
+    --viz-2: #1baf7a;
+    --viz-3: #eda100;
+    --viz-4: #008300;
+    --viz-5: #4a3aa7;
+    --viz-6: #e34948;
+    --viz-7: #e87ba4;
+    --viz-8: #eb6834;
+    --viz-good: #0ca30c;
+    --viz-warning: #fab219;
+    --viz-serious: #ec835a;
+    --viz-critical: #d03b3b;
+    --viz-track: #e1e0d9;
+    --viz-ink: #0b0b0b;
+    --viz-ink-muted: #898781;
+  }
+
+  :root[data-theme="dark"],
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 96%;
+    --card: 222 44% 9%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 44% 9%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 213 94% 62%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 15%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 15%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 18%;
+    --accent-foreground: 210 40% 96%;
+    --destructive: 0 63% 40%;
+    --destructive-foreground: 210 40% 96%;
+    --success: 142 61% 45%;
+    --success-foreground: 210 40% 96%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 222 47% 11%;
+    --border: 217 33% 18%;
+    --input: 217 33% 18%;
+    --ring: 213 94% 62%;
+
+    --viz-1: #3987e5;
+    --viz-2: #199e70;
+    --viz-3: #c98500;
+    --viz-4: #008300;
+    --viz-5: #9085e9;
+    --viz-6: #e66767;
+    --viz-7: #d55181;
+    --viz-8: #d95926;
+    --viz-good: #0ca30c;
+    --viz-warning: #fab219;
+    --viz-serious: #ec835a;
+    --viz-critical: #d03b3b;
+    --viz-track: #2c2c2a;
+    --viz-ink: #ffffff;
+    --viz-ink-muted: #c3c2b7;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Markdown / chapter content typography */
+.prose-sap {
+  @apply max-w-none text-foreground leading-7;
+}
+.prose-sap h1 {
+  @apply text-3xl font-bold mt-10 mb-4 scroll-mt-24;
+}
+.prose-sap h2 {
+  @apply text-2xl font-bold mt-10 mb-4 pb-2 border-b border-border scroll-mt-24;
+}
+.prose-sap h3 {
+  @apply text-xl font-semibold mt-8 mb-3 scroll-mt-24;
+}
+.prose-sap h4 {
+  @apply text-lg font-semibold mt-6 mb-2 scroll-mt-24;
+}
+.prose-sap p {
+  @apply my-4 text-muted-foreground;
+}
+.prose-sap ul {
+  @apply my-4 ml-6 list-disc space-y-1.5 text-muted-foreground;
+}
+.prose-sap ol {
+  @apply my-4 ml-6 list-decimal space-y-1.5 text-muted-foreground;
+}
+.prose-sap li > p {
+  @apply my-0;
+}
+.prose-sap strong {
+  @apply text-foreground font-semibold;
+}
+.prose-sap a {
+  @apply text-primary underline underline-offset-4;
+}
+.prose-sap blockquote {
+  @apply border-l-4 border-primary/50 bg-muted/50 pl-4 py-2 my-4 italic;
+}
+.prose-sap table {
+  @apply w-full my-6 text-sm border-collapse;
+}
+.prose-sap th {
+  @apply border border-border bg-muted px-3 py-2 text-left font-semibold;
+}
+.prose-sap td {
+  @apply border border-border px-3 py-2 align-top;
+}
+.prose-sap code:not(pre code) {
+  @apply rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em] text-primary;
+}
+.prose-sap pre {
+  @apply my-4 overflow-x-auto rounded-lg border border-border bg-[#0d1117] p-4 text-sm;
+}
+.prose-sap pre code {
+  @apply font-mono text-[0.85em] bg-transparent p-0;
+}
+.prose-sap hr {
+  @apply my-8 border-border;
+}
+
+.mermaid-container {
+  @apply my-6 flex justify-center overflow-x-auto rounded-lg border border-border bg-card p-4;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .prose-sap {
+    color: black !important;
+  }
+  .prose-sap * {
+    color: black !important;
+    background: transparent !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  a {
+    text-decoration: none !important;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full;
+}

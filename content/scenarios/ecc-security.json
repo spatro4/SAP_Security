@@ -1,0 +1,129 @@
+[
+  {
+    "id": "ecc-s1",
+    "category": "ecc-security",
+    "title": "User Cannot Execute VA01 for a Newly Introduced Order Type",
+    "difficulty": "Medium",
+    "situation": "A sales user reports they can no longer create sales orders using VA01 for a new order type, ZOR, introduced last week to support a new business line. The user's role has not changed, and other order types work fine for them.",
+    "troubleshootingSteps": [
+      "Run SU53 immediately after the failed attempt to identify the last failed authorization check.",
+      "Confirm the failing object is a sales document authorization object checking the order type field specifically, not an org-level field like sales organization.",
+      "Pull the user's role authorization data for that object and inspect the actual list of order type values maintained.",
+      "Confirm whether ZOR is a genuinely new order type created in customizing (VOV8) after the role's authorization values were last set, versus a renamed existing one.",
+      "Check whether other roles across the sales organization have the same gap, since a new order type typically affects every role scoped to that sales area, not just one user."
+    ],
+    "toolsUsed": ["SU53", "STAUTHTRACE", "PFCG"],
+    "tablesChecked": ["AGR_1251"],
+    "authObjects": ["V_VBAK_AAT"],
+    "rootCause": "Authorization object V_VBAK_AAT restricts which sales document types (order types) a role can create or change, and its field values were maintained as a static explicit list rather than an open range. When the new order type ZOR was introduced for the new business line, no process existed to review and update existing roles' order-type authorization lists, so every role scoped to that sales area was missing the new value by default rather than through any error - the role hadn't changed, but the business's set of valid order types had.",
+    "resolution": "Added ZOR to the relevant roles' V_VBAK_AAT field values, regenerated, and confirmed the user could create orders successfully. Identified and updated the small number of other roles sharing the same gap before they generated support tickets.",
+    "preventiveMeasures": [
+      "Add authorization object review to the standard change process whenever a new sales document type, order type, or similar master-data-like configuration value is introduced.",
+      "Where business volatility in these values is high, evaluate whether a role's field value list should be maintained more proactively rather than reactively per new value.",
+      "Maintain a cross-reference of which roles are scoped to which order-type-dependent business processes, so a new order type's affected role list can be identified quickly rather than discovered one ticket at a time."
+    ],
+    "relatedQuestionIds": ["ecc-q5"]
+  },
+  {
+    "id": "ecc-s2",
+    "category": "ecc-security",
+    "title": "Terminated Employee's Account Used to Download Customer Data 12 Days After Termination",
+    "difficulty": "Hard",
+    "situation": "A security monitoring alert flags unusual data export activity from an account belonging to an employee whose termination date, per HR records, was 12 days earlier. The account was still active and unlocked in SAP at the time of the activity.",
+    "troubleshootingSteps": [
+      "Confirm the account's actual lock/active status in SU01 and cross-reference against the HR termination action date in infotype 0000.",
+      "Pull SM20 security audit log entries for the account covering the period between termination and the flagged activity to establish a full activity timeline.",
+      "Check the HR-to-SAP deprovisioning integration job logs to determine whether the termination event was ever transmitted or processed.",
+      "Review USR02 for the account's last successful logon timestamps to confirm the account was genuinely used interactively during the gap window, not just technically still active.",
+      "Determine whether the access during this window was performed by the terminated individual or potentially by someone else using their still-valid credentials."
+    ],
+    "toolsUsed": ["SU01", "SM20", "SM37"],
+    "tablesChecked": ["USR02"],
+    "authObjects": [],
+    "rootCause": "The HR-to-SAP deprovisioning integration relied on a weekly batch interface job; the termination was processed by HR mid-cycle, and the batch job that would have locked the account ran on its normal weekly schedule but failed silently that week due to an unrelated IDoc processing error, with no independent reconciliation check to catch a failed run. The account therefore remained fully active for the entire 12-day gap with no compensating control to detect the discrepancy between HR's termination record and SAP's still-active user status.",
+    "resolution": "Immediately locked the account, forensically reviewed all activity during the gap window in cooperation with HR and legal, and confirmed the specific data export in question. Findings were escalated per the organization's incident response and data breach notification procedures. The failed IDoc was identified and the underlying interface issue corrected.",
+    "preventiveMeasures": [
+      "Implement a daily (not weekly) reconciliation job independently comparing HR's active employee list against SAP's active user list, alerting on any discrepancy regardless of whether the primary deprovisioning interface reports success.",
+      "Add monitoring and alerting on the deprovisioning interface job itself, so a failed run is caught within hours, not discovered only through unrelated security monitoring.",
+      "For high-risk terminations (involuntary, with data access to sensitive systems), implement an immediate manual lock step as a parallel safeguard rather than relying solely on the automated interface."
+    ],
+    "relatedQuestionIds": ["ecc-q4"],
+    "diagram": "flowchart TD\n  A[HR Processes Termination] --> B[Weekly Batch Deprovisioning Job]\n  B --> C[IDoc Processing Error - Job Fails Silently]\n  C --> D[No Independent Reconciliation Check]\n  D --> E[Account Remains Active 12 Days]\n  E --> F[Data Export Activity Flagged by Unrelated Monitoring]\n  F --> G[Forensic Review and Incident Escalation]"
+  },
+  {
+    "id": "ecc-s3",
+    "category": "ecc-security",
+    "title": "Emergency Role Assignment Doesn't Take Effect for Users Already Logged In During Month-End Close",
+    "difficulty": "Medium",
+    "situation": "During a time-critical month-end close, several finance users are urgently assigned a new emergency role granting a missing posting authorization. PFCG confirms the assignment is correct and active, but the affected users still receive the same authorization failure minutes later, causing panic on the support bridge.",
+    "troubleshootingSteps": [
+      "Confirm in AGR_USERS that the role assignment is genuinely active with correct validity dates for the affected users.",
+      "Confirm the users experiencing the continued failure are the same users who were already logged into an active session before the role was assigned.",
+      "Explain the authorization buffer mechanism to the bridge to set correct expectations while a fix is applied.",
+      "Have one affected user log off and back on, or execute SU56 to reset their buffer, and retest immediately.",
+      "Confirm resolution across all remaining affected users using the same approach before closing the incident."
+    ],
+    "toolsUsed": ["PFCG", "SU56", "SE16N"],
+    "tablesChecked": ["AGR_USERS"],
+    "authObjects": [],
+    "rootCause": "The authorization buffer is built once at logon and held in session memory for performance; the affected users had been logged in since before the emergency role was assigned, so the kernel had no way to know a new role had been granted until the buffer was rebuilt via re-login or an explicit reset. The role assignment itself was entirely correct - the delay was purely a session-state issue, not an authorization design gap - but it wasn't communicated to the users or the bridge as an expected step, causing unnecessary escalation.",
+    "resolution": "Instructed all affected users to log off and log back on (or applied SU56 reset where re-login wasn't immediately practical mid-task), confirming the previously-assigned role then took effect immediately. No further role changes were needed.",
+    "preventiveMeasures": [
+      "Add 're-login or SU56 reset required' as a standard, explicitly communicated step in any emergency role assignment procedure, so it's expected rather than alarming when access doesn't work instantly.",
+      "Include this buffer behavior explanation in the standard incident bridge runbook for authorization-adjacent issues, reducing panic and repeated escalation for what is a normal, well-understood mechanism.",
+      "For known high-criticality windows like month-end close, consider proactively confirming role assignments and required re-logins are completed before the time-critical window begins, rather than reacting mid-close."
+    ],
+    "relatedQuestionIds": ["ecc-q3"]
+  },
+  {
+    "id": "ecc-s4",
+    "category": "ecc-security",
+    "title": "External Audit Access Review Misses Hundreds of Users Due to an Undocumented Reference User",
+    "difficulty": "Hard",
+    "situation": "An external auditor requests a complete list of every user with access to a specific sensitive display authorization used across a customer self-service portal. The security team's standard SUIM role-assignment query returns only a handful of directly-assigned users, but the auditor's independent sampling of actual portal users finds many more people who clearly have the access in practice.",
+    "troubleshootingSteps": [
+      "Reconcile the auditor's sampled user list against the SUIM report to identify the specific accounts showing access the report didn't explain.",
+      "Check each unexplained user's SU01 record for a 'Reference User for Additional Authorizations' field entry rather than assuming a report or query error.",
+      "Identify which reference user is populated and pull that reference user's own role assignments to confirm it accounts for the observed access.",
+      "Determine how long the reference user configuration has been in place and who originally configured it.",
+      "Rebuild the complete access population by combining directly-assigned roles with every user pointing to the reference user, and reconcile that combined list against the auditor's sample."
+    ],
+    "toolsUsed": ["SUIM", "SU01", "SE16N"],
+    "tablesChecked": ["USR02", "AGR_USERS"],
+    "authObjects": [],
+    "rootCause": "A reference user configured six years earlier during the portal's original implementation provides a baseline set of authorizations, including the sensitive display access in question, to hundreds of portal users through the 'Reference User for Additional Authorizations' field rather than through direct role assignment. Standard access review queries built around AGR_USERS role assignments never surfaced this population because those users hold no relevant role directly - the access flows entirely through the reference user link, which the original implementation team's institutional knowledge had faded on, and no subsequent access review process was ever updated to account for it.",
+    "resolution": "Produced a corrected, complete access population combining direct role assignments and reference-user-derived access, delivered to the auditor with an explanation of the reference user mechanism and its historical configuration. Documented the reference user's purpose and scope formally since no design documentation had existed.",
+    "preventiveMeasures": [
+      "Build every future access review query to explicitly resolve and include reference-user-derived access, not just direct role assignments.",
+      "Formally document the purpose, scope, and owner of any reference user configuration in the landscape, since undocumented reference users are a recurring and easily-missed audit blind spot.",
+      "Periodically re-validate that reference user configurations still reflect an intentional, currently-appropriate design decision rather than a forgotten legacy artifact."
+    ],
+    "relatedQuestionIds": ["ecc-q2"]
+  },
+  {
+    "id": "ecc-s5",
+    "category": "ecc-security",
+    "title": "Authorization Buffer Overflow Causes Intermittent Failures for a Power User with 200+ Roles",
+    "difficulty": "Architect",
+    "situation": "A senior finance power user with roles spanning nearly every company code and process area reports intermittent authorization failures - the same transaction sometimes works and sometimes fails for no apparent reason, with no recent role changes. SU53 sometimes shows no failure at all even when the transaction visibly fails.",
+    "troubleshootingSteps": [
+      "Confirm the user's total assigned role and generated authorization count via AGR_USERS and compare against a typical user's volume.",
+      "Check the current value of profile parameter auth/auth_number_in_userbuffer against the actual number of authorizations the user's combined roles would generate.",
+      "Use SU56 to display the user's actual authorization buffer contents and check for a truncation indicator showing the buffer limit was reached.",
+      "Correlate the specific transactions that intermittently fail against which authorizations would fall near or beyond the buffer's cutoff point.",
+      "Confirm with Basis whether the parameter is a static kernel/profile parameter requiring an instance restart to change."
+    ],
+    "toolsUsed": ["SU56", "RSPARAM", "AGR_USERS query"],
+    "tablesChecked": ["AGR_USERS", "AGR_1251"],
+    "authObjects": [],
+    "rootCause": "The user's combined role assignments generated a number of individual authorizations exceeding the configured authorization buffer limit (auth/auth_number_in_userbuffer), a known but often-forgotten kernel-level constraint on how many authorizations can be held in a user's session buffer. Once the limit was reached, additional authorizations were silently truncated from the buffer rather than causing an obvious error, meaning whichever authorizations happened to be built into the buffer at logon (order can vary) determined which specific checks passed or failed - producing exactly the intermittent, seemingly random pattern reported, and explaining why SU53 sometimes showed no failure since the truncated authorization was never in the buffer to fail against at all in some sessions.",
+    "resolution": "Increased the auth/auth_number_in_userbuffer parameter to a value comfortably above the user's actual authorization count, coordinated an instance restart during a maintenance window, and confirmed the user's failures stopped recurring across multiple sessions.",
+    "preventiveMeasures": [
+      "Monitor authorization buffer utilization for high-role-count power users proactively, rather than waiting for intermittent failure reports.",
+      "Treat an excessively high role count per user (200+) as itself a role design red flag warranting review, since it's both an SoD risk and an operational/technical risk via buffer limits.",
+      "Document this failure mode explicitly in the team's troubleshooting runbook, since its intermittent, hard-to-reproduce symptom profile is highly distinctive and otherwise time-consuming to diagnose from scratch."
+    ],
+    "relatedQuestionIds": ["ecc-q3"],
+    "diagram": "flowchart TD\n  A[User Has 200+ Roles Assigned] --> B[Combined Authorizations Exceed Buffer Limit]\n  B --> C[auth/auth_number_in_userbuffer Threshold Reached]\n  C --> D[Additional Authorizations Silently Truncated]\n  D --> E[Buffer Contents Vary by Session]\n  E --> F[Same Transaction Intermittently Passes or Fails]\n  F --> G[SU56 Reveals Truncation Indicator]"
+  }
+]

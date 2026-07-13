@@ -1,0 +1,120 @@
+[
+  {
+    "id": "authtrace-s1",
+    "category": "authorization-troubleshooting",
+    "title": "A user cannot execute VA01 and SU53 shows nothing useful",
+    "difficulty": "Medium",
+    "situation": "A sales user reports being unable to create a sales order via VA01. SU53, run immediately after reproducing, shows no failed check at all - yet the transaction still errors out with what looks like an authorization-style message.",
+    "troubleshootingSteps": [
+      "Confirm the exact error message text and transaction step where it occurs, not just 'VA01 doesn't work'",
+      "Start a scoped STAUTHTRACE for the user, then have them reproduce the exact steps",
+      "Review the full trace output for any failed check, not just the last one",
+      "Cross-check whether the failing object is a standard object or a custom Z-object from an enhancement",
+      "If a custom object is found, check SU24 to see if it was ever documented as a proposal for VA01",
+      "Compare the user's actual assigned role authorization values against what the trace shows is required"
+    ],
+    "toolsUsed": ["SU53", "STAUTHTRACE", "SU24", "PFCG"],
+    "tablesChecked": ["AGR_1251"],
+    "authObjects": ["V_VBAK_VKO", "V_VBAK_AAT"],
+    "rootCause": "A custom enhancement performed an AUTHORITY-CHECK against a Z-authorization object never documented in SU24, so it never appeared as a proposal in any role and was never assigned to anyone using the enhanced flow.",
+    "resolution": "The missing Z-authorization object was added to the affected roles after confirming the correct field values with the developer, and an SU24 proposal entry was created retroactively so future role builds would automatically pick it up.",
+    "preventiveMeasures": [
+      "Mandate SU24 proposal entries for any new custom AUTHORITY-CHECK as part of the transport checklist",
+      "Include custom authorization objects in a documented enhancement register reviewed by the security team"
+    ],
+    "diagram": "flowchart TD\n  A[User: VA01 fails] --> B[SU53: nothing shown]\n  B --> C[Start STAUTHTRACE]\n  C --> D[Reproduce failure]\n  D --> E[Trace reveals custom Z-object check]\n  E --> F[Check SU24 - never documented]\n  F --> G[Add object to role + create SU24 proposal]"
+  },
+  {
+    "id": "authtrace-s2",
+    "category": "authorization-troubleshooting",
+    "title": "Identifying derived role issues after a mid-project organizational value addition",
+    "difficulty": "Hard",
+    "situation": "A new plant was added mid-project to an existing derived role structure. Users assigned the new derived role for that plant report inconsistent access - some functions work, others silently return no data.",
+    "troubleshootingSteps": [
+      "Use SUIM to list all derived roles under the relevant master and confirm the new plant's derived role actually exists",
+      "Compare the new derived role's last generation timestamp against the master role's last modification timestamp",
+      "Check PFCG's mass generation log to see if the new derived role was included in the most recent regeneration run",
+      "Run STAUTHTRACE for an affected user to confirm which specific object/value combination is failing",
+      "Manually regenerate the specific derived role and retest"
+    ],
+    "toolsUsed": ["SUIM", "PFCG", "STAUTHTRACE"],
+    "tablesChecked": ["AGR_1251", "AGR_DEFINE"],
+    "authObjects": [],
+    "rootCause": "The new derived role was created after the last mass-generation run for the master role's derivation tree, so it never inherited the master's most recent menu and authorization changes.",
+    "resolution": "The specific derived role was regenerated individually, and the mass generation process was updated to explicitly include newly created derived roles rather than relying on a previously cached list of children.",
+    "preventiveMeasures": [
+      "Always re-run mass generation with 'Adjust Derived Roles' immediately after adding any new derived role to an existing master",
+      "Maintain a checklist step for org-structure additions requiring derived role creation and regeneration"
+    ]
+  },
+  {
+    "id": "authtrace-s3",
+    "category": "authorization-troubleshooting",
+    "title": "Debugging why SU24 proposals don't appear for a newly transported custom transaction",
+    "difficulty": "Medium",
+    "situation": "A newly transported custom transaction shows zero authorization object proposals when added to a role menu in PFCG, even though the transaction clearly performs authorization checks in its code.",
+    "troubleshootingSteps": [
+      "Confirm in SU24 whether any entry exists at all for the transaction",
+      "If no entry exists, classify this as 'Unmaintained' rather than 'No Check' - a critical distinction",
+      "Work with the developer to identify every AUTHORITY-CHECK statement in the transaction's code",
+      "Create the missing SU24 proposal entries with appropriate check indicators and default values",
+      "Re-add the transaction to the role menu in PFCG and confirm the objects now propose correctly"
+    ],
+    "toolsUsed": ["SU24", "PFCG", "SE38/code review"],
+    "tablesChecked": ["USOBX_C", "USOBT_C"],
+    "authObjects": [],
+    "rootCause": "The custom transaction was transported without ever having its SU24 proposal entries maintained, meaning the checks exist in code but are entirely invisible to PFCG's proposal mechanism.",
+    "resolution": "SU24 entries were created for every authorization object checked in the transaction's code, verified against the developer's code review, then the role was rebuilt with the transaction re-added to correctly generate the proposals.",
+    "preventiveMeasures": [
+      "Add mandatory SU24 maintenance as a required step before any custom transaction can be transported to production",
+      "Include SU24 verification in the standard development unit test checklist"
+    ]
+  },
+  {
+    "id": "authtrace-s4",
+    "category": "authorization-troubleshooting",
+    "title": "Fiori app authorization failure invisible to standard backend trace tools",
+    "difficulty": "Hard",
+    "situation": "A Fiori app returns a generic error for a subset of users. SU53 and STAUTHTRACE on the backend show all checks passing, yet the app still fails to load data for these specific users.",
+    "troubleshootingSteps": [
+      "Confirm whether the failure is truly backend-authorization-related or occurring at a different layer (Gateway, OData, or CDS/DCL level)",
+      "Check the Gateway error logs (/IWFND/ERROR_LOG, /IWBEP/ERROR_LOG) for the affected time window",
+      "If backend AUTHORITY-CHECK all pass, investigate CDS view DCL role restrictions for the affected users",
+      "Confirm whether the affected users' derived role org values changed recently (e.g., a reorg) without corresponding DCL role updates",
+      "Test the same OData call directly via a REST client bypassing the Fiori front-end to isolate the failing layer"
+    ],
+    "toolsUsed": ["STAUTHTRACE", "Gateway error logs", "RSECADMIN"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The failure was occurring at the CDS view DCL row-level security layer, entirely independent of and invisible to classic backend AUTHORITY-CHECK trace tools, after an org reassignment wasn't reflected in the DCL role's restriction logic.",
+    "resolution": "The DCL role was updated to correctly reflect the users' new organizational assignment, restoring expected row-level data visibility without any change needed to the classic backend authorization objects.",
+    "preventiveMeasures": [
+      "Always include DCL/CDS-level checks explicitly in Fiori/S4HANA authorization troubleshooting runbooks, not just classic AUTHORITY-CHECK tools",
+      "Pair org-structure changes with a checklist item to review DCL role definitions, not only PFCG derived roles"
+    ],
+    "diagram": "flowchart TD\n  A[Fiori app fails for subset of users] --> B[SU53/STAUTHTRACE: all pass]\n  B --> C[Check Gateway error logs]\n  C --> D[Check CDS/DCL role restrictions]\n  D --> E[Org reassignment not reflected in DCL role]\n  E --> F[Update DCL role - resolved]"
+  },
+  {
+    "id": "authtrace-s5",
+    "category": "authorization-troubleshooting",
+    "title": "Troubleshooting a landscape-wide spike in authorization failures after a transport",
+    "difficulty": "Principal Architect",
+    "situation": "Within an hour of a routine transport landing in production, the service desk sees a sharp spike in authorization-related tickets across multiple unrelated business processes.",
+    "troubleshootingSteps": [
+      "Immediately correlate the timing of the transport with the onset of the ticket spike",
+      "Review the transport's contents for any SU24 check indicator changes, not just code or role changes",
+      "Check whether the transport altered a widely-shared authorization object's check indicator (e.g., from No Check to Check/Maintain)",
+      "Run STAUTHTRACE for a small sample of affected users across different business processes to confirm a common failing object",
+      "Decide between an emergency rollback of the transport versus a rapid-fix forward transport, based on blast radius and rollback risk"
+    ],
+    "toolsUsed": ["STMS", "SU24", "STAUTHTRACE", "SM20"],
+    "tablesChecked": ["USOBX_C", "USOBT_C"],
+    "authObjects": [],
+    "rootCause": "The transport included an unreviewed SU24 check indicator change on a widely-shared authorization object, newly enforcing a check that had previously been silently disabled, affecting every business process that happened to rely on that object.",
+    "resolution": "An emergency transport reverted the specific SU24 check indicator change while the broader implications were properly assessed and role updates were planned for a controlled follow-up transport, restoring service within the hour.",
+    "preventiveMeasures": [
+      "Require explicit, separately reviewed sign-off for any transport containing SU24 check indicator changes, distinct from ordinary code review",
+      "Build automated pre-transport impact analysis identifying which roles/business processes reference any authorization object being changed"
+    ]
+  }
+]

@@ -1,0 +1,125 @@
+[
+  {
+    "id": "gw-s1",
+    "category": "gateway-security",
+    "title": "$batch mass update reports success but one changeset silently rolled back",
+    "difficulty": "Hard",
+    "situation": "A mass document update Fiori app processes multiple records per save operation using a $batch request with several changesets. Users occasionally report that the app shows a success message, but a subset of the intended updates never actually appear in the backend when checked afterward.",
+    "troubleshootingSteps": [
+      "Capture a full network trace of a reproduced failure showing the raw multipart $batch response, not just the app's rendered success message",
+      "Inspect the embedded response for each individual changeset within the batch to identify which one actually failed",
+      "Check /IWBEP/ERROR_LOG for the specific authorization or business logic error inside the failed changeset",
+      "Review the app's client-side error handling logic to confirm whether it inspects each embedded part's status or only the outer HTTP response",
+      "Reproduce the failing changeset in isolation via /IWFND/GW_CLIENT to confirm the exact authorization object or business rule causing the rollback"
+    ],
+    "toolsUsed": ["/IWFND/GW_CLIENT", "/IWBEP/ERROR_LOG", "Browser network trace"],
+    "tablesChecked": [],
+    "authObjects": ["M_MSEG_WMB"],
+    "rootCause": "The app's client-side success handling only checked the outer HTTP status of the $batch response and never parsed the embedded multipart response for each changeset; one changeset was failing an authorization check for a specific plant value not held by certain users, rolling back correctly on the backend, but the UI reported blanket success regardless.",
+    "resolution": "Fixed the app's client-side logic to parse and surface each embedded changeset's actual status rather than relying solely on the outer response, and corrected the underlying role gap causing the specific changeset's authorization failure so the operation succeeds for the affected users going forward.",
+    "preventiveMeasures": [
+      "Mandate that any $batch-consuming app's error handling be explicitly tested against a deliberately failing changeset during development, not just the happy path",
+      "Add embedded batch-part failure detection to the standard app development and code review checklist",
+      "Build a monitoring check that flags a mismatch between outer batch success and embedded part failures for early detection"
+    ],
+    "diagram": "sequenceDiagram\n  participant App\n  participant GW as Gateway\n  participant BE as Backend\n  App->>GW: POST /$batch (changeset with 3 ops)\n  GW->>BE: Execute changeset ops\n  BE->>BE: Op 2 fails AUTHORITY-CHECK\n  BE-->>GW: Changeset rolled back, error in part 2\n  GW-->>App: Outer 200 OK, embedded part 2 error\n  App->>App: Only checks outer status - reports 'Success'"
+  },
+  {
+    "id": "gw-s2",
+    "category": "gateway-security",
+    "title": "OData service works in QA but is completely unreachable in production",
+    "difficulty": "Easy",
+    "situation": "A newly built OData service was thoroughly tested and signed off in QA. Immediately after the standard transport to production, every call to the service returns a 404, affecting all users uniformly with no role-related pattern.",
+    "troubleshootingSteps": [
+      "Confirm the failure is uniform across all users rather than isolated to a subset, ruling out an authorization-specific cause",
+      "Check the SICF node status for this service specifically in production versus its confirmed active state in QA",
+      "Review the transport contents to confirm whether SICF activation was included or requires a separate manual step",
+      "Activate the SICF node manually in production following the standard change process",
+      "Re-test with a single user to confirm resolution before notifying the broader user base"
+    ],
+    "toolsUsed": ["SICF", "STMS"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "SICF node activation is a manual, system-specific step that does not travel automatically with a standard ABAP transport, and it was missed as part of the production go-live checklist for this new service.",
+    "resolution": "Manually activated the SICF node in production, confirmed the service responded correctly, and reviewed the go-live checklist to identify why this step was skipped for this particular transport.",
+    "preventiveMeasures": [
+      "Add SICF activation as an explicit, sign-off-required line item on every go-live checklist involving a new OData service",
+      "Build an automated post-transport verification script that checks expected SICF node activation state in the target system",
+      "Document the list of SICF nodes each Fiori/OData deliverable depends on as part of standard technical documentation"
+    ]
+  },
+  {
+    "id": "gw-s3",
+    "category": "gateway-security",
+    "title": "External partner integration fails intermittently with authentication errors",
+    "difficulty": "Hard",
+    "situation": "An external logistics partner consuming an OData API through a Gateway hub reports intermittent authentication failures throughout the day, with no consistent pattern of timing or specific requests, while internal users consuming the same underlying backend through the standard Fiori Launchpad never experience any issue.",
+    "troubleshootingSteps": [
+      "Confirm the failures are specific to the external partner's integration path rather than affecting internal Fiori users on the same backend",
+      "Check the trust/authentication configuration used specifically for the external partner channel (separate from internal principal propagation)",
+      "Review token or trust ticket expiration and renewal behavior for the partner's authentication mechanism",
+      "Correlate failure timestamps against the trust/token renewal cycle to see if failures cluster right around expiration boundaries",
+      "Check whether the partner's integration retries or renews credentials correctly on expiry, or fails outright and requires manual intervention"
+    ],
+    "toolsUsed": ["/IWFND/ERROR_LOG", "SM59", "SMT1"],
+    "tablesChecked": [],
+    "authObjects": ["S_RFC"],
+    "rootCause": "The external partner's authentication mechanism used a token or trust ticket with a fixed expiration window, and the partner's own integration client did not automatically renew it before expiry, causing every request made in the brief window immediately after expiration - before the partner's system detected and refreshed it - to fail.",
+    "resolution": "Worked with the partner's technical team to implement proactive token renewal well before expiry rather than reactive renewal after failure, and added monitoring on the SAP side to alert if a pattern of authentication failures from this specific partner channel recurred.",
+    "preventiveMeasures": [
+      "Document expected token/trust renewal behavior explicitly in the partner integration technical specification, not just the initial authentication setup",
+      "Add monitoring specifically for external partner authentication failure patterns, distinct from internal user authentication monitoring",
+      "Periodically review external trust/token configurations for all partner integrations as part of a standing security review, not just at initial go-live"
+    ],
+    "diagram": "flowchart TD\n  A[Partner Token Issued] --> B[Token Valid Window]\n  B --> C{Request Sent Before Expiry?}\n  C -->|Yes| D[Success]\n  C -->|No - Partner Didn't Renew| E[Authentication Failure]\n  E --> F[Partner Detects Failure]\n  F --> G[Manual/Delayed Token Refresh]\n  G --> B"
+  },
+  {
+    "id": "gw-s4",
+    "category": "gateway-security",
+    "title": "Same Fiori app returns empty data for a newly onboarded second backend",
+    "difficulty": "Medium",
+    "situation": "A finance reporting app was originally built and rolled out against one regional backend system and worked correctly. When the same app was extended to serve a second region's backend system through the Gateway hub, all second-region users see the app load but with a permanently empty data table.",
+    "troubleshootingSteps": [
+      "Confirm the app loads and passes SICF/S_START checks correctly for second-region users, isolating the issue to the data retrieval step",
+      "Check the system alias mapping in /IWFND/MAINT_SERVICE to confirm a mapping exists at all for the second backend",
+      "Verify the RFC destination behind that alias correctly points to and authenticates against the second backend system",
+      "Check whether the second backend has the corresponding business roles and authorization objects provisioned, since they weren't automatically replicated from the first backend's setup",
+      "Test the service directly against the second backend's alias using /IWFND/GW_CLIENT to isolate whether the issue is alias routing or backend authorization"
+    ],
+    "toolsUsed": ["/IWFND/MAINT_SERVICE", "/IWFND/GW_CLIENT", "PFCG"],
+    "tablesChecked": ["AGR_1251"],
+    "authObjects": [],
+    "rootCause": "When the app was extended to the second backend, the system alias mapping and RFC destination were correctly configured, but the corresponding backend-side business roles and authorization objects were never provisioned for the second region's users, since that step wasn't part of a standard 'extend to new backend' checklist and was assumed to already be in place.",
+    "resolution": "Provisioned the missing backend-side roles and authorization objects for second-region users, verified data now returned correctly, and documented a standard checklist for extending any existing service to a new backend covering both alias/destination wiring and backend authorization setup.",
+    "preventiveMeasures": [
+      "Create and enforce a standard checklist for extending any existing Fiori/OData service to a new backend, explicitly covering alias mapping, RFC destination, and backend authorization provisioning as separate required steps",
+      "Include a data-level smoke test (not just app-load testing) whenever a service is extended to a new backend",
+      "Assign clear ownership for backend-side authorization setup whenever a multi-backend service is extended, so it isn't assumed to be 'already done'"
+    ]
+  },
+  {
+    "id": "gw-s5",
+    "category": "gateway-security",
+    "title": "Penetration test finds an internet-exposed OData service with no perimeter control",
+    "difficulty": "Architect",
+    "situation": "An external penetration test identifies that an OData service intended only for a specific partner integration is reachable directly from the internet through the Gateway hub, with no reverse proxy, API management layer, or IP restriction in front of it - relying entirely on backend authorization to prevent misuse.",
+    "troubleshootingSteps": [
+      "Confirm exactly which services are reachable from the internet through the Gateway hub versus intended for internal-only exposure",
+      "Review how this specific service came to be exposed without a perimeter control layer, tracing back through change history",
+      "Assess what backend authorization is actually enforced for this service and whether it would meaningfully stop unauthorized access if perimeter controls remain absent",
+      "Design and implement an API Management/reverse proxy layer in front of all externally-facing services, including proper partner authentication",
+      "Review every other currently internet-exposed service for the same gap, not just the one identified by the penetration test"
+    ],
+    "toolsUsed": ["/IWFND/MAINT_SERVICE", "SICF"],
+    "tablesChecked": [],
+    "authObjects": ["S_SERVICE"],
+    "rootCause": "The service was originally exposed for a time-boxed pilot integration with a perimeter control layer planned as a follow-up task; the pilot became a permanent production integration without the planned perimeter layer ever being implemented, leaving backend authorization as the sole control against internet-originated traffic.",
+    "resolution": "Implemented an API Management/reverse proxy layer in front of all externally-facing Gateway services with proper partner authentication and rate limiting, retroactively closing direct internet reachability to the Gateway hub itself, and conducted a full inventory of all currently-exposed services to confirm none of them shared the same gap.",
+    "preventiveMeasures": [
+      "Never allow a pilot or temporary integration's security controls to become permanent without following through on the planned production-grade controls",
+      "Require all externally-facing services to pass through a governed perimeter layer as a hard architectural rule, not a best-practice recommendation",
+      "Include periodic external attack surface reviews (not just point-in-time penetration tests) as a standing security operations activity"
+    ],
+    "diagram": "flowchart LR\n  Internet[Internet] -->|No Perimeter Control| GW[Gateway Hub - Direct Exposure]\n  GW --> BE[Backend - Authorization Only Control]\n  style GW fill:#f96\n  Fixed[Internet] -->|API Management + Auth| APIM[Perimeter Layer]\n  APIM --> GW2[Gateway Hub]\n  GW2 --> BE2[Backend]"
+  }
+]

@@ -1,0 +1,125 @@
+[
+  {
+    "id": "s4h-s1",
+    "category": "s4hana-security",
+    "title": "Fiori analytical app loads fine but shows no data for a subset of users",
+    "difficulty": "Hard",
+    "situation": "A newly rolled-out sales analytics Fiori app, built on a custom CDS view with DCL-based row-level security, works correctly for most sales users but returns a completely empty result list for a specific group of regional users. No authorization dump appears - the app simply renders an empty table with no error banner.",
+    "troubleshootingSteps": [
+      "Confirm the affected users can open the app at all (tile visible, S_START check passing) to rule out a launch-authorization issue versus a data-filtering issue",
+      "Check the CDS view's DCL source to identify which authorization object and field the WHERE condition's aspect pfcg_auth references",
+      "Compare the affected users' role assignments (PFCG) for that authorization object's org value against a working user's role assignments",
+      "Use SU53 or STAUTHTRACE while an affected user runs the app to confirm the object is being evaluated and see what values are actually in their buffer",
+      "Check whether the affected users' org values were recently changed (e.g., a sales area realignment) without the derived roles being regenerated",
+      "Validate directly against the CDS view in SE16N/RSRT-style testing with the exact org values to confirm the DCL filter behaves as expected outside the app layer"
+    ],
+    "toolsUsed": ["PFCG", "SU53", "STAUTHTRACE", "SE11"],
+    "tablesChecked": ["AGR_1251", "AGR_USERS"],
+    "authObjects": ["V_VBAK_VKO"],
+    "rootCause": "The affected users' derived roles held stale sales organization values from before a regional realignment; the master role's menu was fine, but the derived roles were never regenerated after the org hierarchy change, so their authorization buffer still carried the old sales org values that the DCL WHERE condition filtered against.",
+    "resolution": "Regenerated the affected derived roles after correcting their sales organization values to match the post-realignment structure, then had the affected users log off and back on to force a fresh authorization buffer build. Confirmed via STAUTHTRACE that the correct sales org values were now present and the app returned the expected rows.",
+    "preventiveMeasures": [
+      "Add org realignment events to the standard role-maintenance checklist so derived role regeneration is never skipped",
+      "Build a periodic reconciliation report comparing HR/org master data sales org assignments against derived role org values to catch drift proactively",
+      "Document that DCL row-level filtering fails silently (empty result, not an error) so support staff know to check org value staleness before assuming a data or app bug"
+    ],
+    "diagram": "flowchart TD\n  A[User Opens Analytics App] --> B{S_START Check}\n  B -->|Pass| C[CDS View Read via OData]\n  C --> D[DCL WHERE Filter: aspect pfcg_auth VKORG]\n  D --> E{User Buffer Has Correct VKORG?}\n  E -->|Stale Org Value| F[Zero Rows Returned - No Error]\n  E -->|Correct Org Value| G[Expected Rows Returned]"
+  },
+  {
+    "id": "s4h-s2",
+    "category": "s4hana-security",
+    "title": "Overview Page KPI tile shows 'no data' despite full transactional access",
+    "difficulty": "Medium",
+    "situation": "A regional finance manager has full transactional authorization to post and review journal entries for their company code, verified via SU53 and role review, yet the Overview Page KPI tile summarizing their company code's financial position shows a blank card with no numbers.",
+    "troubleshootingSteps": [
+      "Confirm the KPI tile is analytics-based (Overview Page/Analytical List Page) rather than a transactional tile, since the authorization model differs entirely",
+      "Check RSECADMIN for the user's assigned analysis authorizations against the relevant characteristics (company code, profit center)",
+      "Confirm whether the user holds any analysis authorization at all, versus one with an incorrect or missing value range",
+      "Compare against a working user's analysis authorization assignment for the same characteristic",
+      "Test the underlying analytical query directly to confirm the authorization gap is the cause rather than a data-availability issue"
+    ],
+    "toolsUsed": ["RSECADMIN", "SU53"],
+    "tablesChecked": ["RSECVAL"],
+    "authObjects": ["S_RS_AUTH"],
+    "rootCause": "The user's classic PFCG role was correctly provisioned with the company code org value for transactional access, but no corresponding analysis authorization had ever been created for that company code in RSECADMIN - the two provisioning processes were handled by different teams and never linked.",
+    "resolution": "Created and assigned the missing analysis authorization scoped to the user's company code, confirmed the KPI tile populated correctly, and flagged the disconnect between classic role provisioning and analysis authorization provisioning to the identity governance process owner.",
+    "preventiveMeasures": [
+      "Link analysis authorization provisioning to the same identity governance trigger that provisions classic org-level role values",
+      "Add an analysis authorization check to new-user and org-change provisioning checklists for any role that includes embedded analytics apps",
+      "Periodically reconcile users with company-code-scoped classic roles against their analysis authorization assignments to catch gaps"
+    ]
+  },
+  {
+    "id": "s4h-s3",
+    "category": "s4hana-security",
+    "title": "Custom report fails post-conversion due to a Simplification List authorization change",
+    "difficulty": "Hard",
+    "situation": "Three weeks after an ECC-to-S/4HANA conversion go-live, a long-standing custom inventory reconciliation report begins throwing an authorization dump for an object that had not changed in the customer's landscape in over eight years. No role changes were made around the failure date.",
+    "troubleshootingSteps": [
+      "Run STAUTHTRACE against a user reproducing the failure to confirm the exact failing authorization object and field values",
+      "Check whether the object's check indicator or field structure changed in SU24/SU25 comparison logs during the conversion project",
+      "Cross-reference the failing object against the Simplification List entries for the inventory management area to check for a documented authorization-relevant change",
+      "Review the custom report's ABAP source for the specific AUTHORITY-CHECK statement and confirm which fields it evaluates",
+      "Determine whether the field values the report is now passing reflect an old data model assumption invalidated by the simplification (e.g., a movement type or field length change)"
+    ],
+    "toolsUsed": ["STAUTHTRACE", "SU25", "SE38"],
+    "tablesChecked": ["USOBX_C", "USOBT_C"],
+    "authObjects": ["M_MSEG_WMB"],
+    "rootCause": "The Simplification List item for the relevant inventory management area had changed how a related data element was populated in the new data model, causing the custom report's AUTHORITY-CHECK to evaluate against a field value that no longer matched what users' roles were provisioned for - a change that was documented in the Simplification Item catalog but not caught during custom code impact analysis before go-live.",
+    "resolution": "Adapted the custom report's authorization check logic to align with the new data model behavior per the Simplification Item guidance, and updated the affected roles' field values to match. Regression-tested against the full set of custom reports flagged in the original custom code impact analysis to confirm no other reports carried the same latent issue.",
+    "preventiveMeasures": [
+      "Ensure custom code impact analysis explicitly cross-references AUTHORITY-CHECK statements against Simplification List items, not just syntax/obsolescence checks",
+      "Build a post-go-live custom code regression test plan that specifically exercises authorization-sensitive code paths, not just functional logic",
+      "Maintain a living list of Simplification Items with authorization implications for future support reference"
+    ],
+    "diagram": "flowchart LR\n  A[ECC Custom Report] --> B[S/4HANA Conversion]\n  B --> C[Simplification List Changes Data Model]\n  C --> D[AUTHORITY-CHECK Field Values No Longer Match Role]\n  D --> E[Authorization Dump Post-Go-Live]\n  E --> F[STAUTHTRACE Identifies Object]\n  F --> G[Cross-Reference Simplification Item]\n  G --> H[Adapt Code + Update Role Values]"
+  },
+  {
+    "id": "s4h-s4",
+    "category": "s4hana-security",
+    "title": "Business role transported to production but Fiori tiles are missing",
+    "difficulty": "Medium",
+    "situation": "A business role was built, tested, and approved in QA with a full set of Fiori catalog tiles visible and functional. After transport to production, the assigned users see the role in their profile but the Fiori Launchpad shows only a fraction of the expected tiles.",
+    "troubleshootingSteps": [
+      "Confirm in PFCG that the production role's menu actually contains the same catalogs/groups as the QA version",
+      "Check the transport log for the business role transport to confirm all referenced catalog and group objects were included, not just the PFCG role definition",
+      "Compare the Fiori Launchpad content (catalogs/groups or spaces/pages) directly between QA and production for the affected business role",
+      "Check whether any custom Z-catalogs referenced by the role were transported as separate objects that may have failed or been sequenced incorrectly",
+      "Force a launchpad cache refresh for an affected user's session to rule out client-side caching of stale content"
+    ],
+    "toolsUsed": ["PFCG", "STMS"],
+    "tablesChecked": ["AGR_DEFINE", "AGR_1251"],
+    "authObjects": [],
+    "rootCause": "The PFCG role transport request only captured the role definition itself; the custom Z-catalog objects the role menu referenced were maintained as separate transportable objects and had been left out of the transport request, so production had a role pointing at catalog content that didn't exist there yet.",
+    "resolution": "Identified and transported the missing custom catalog objects, then re-transported the business role to re-establish correct references. Verified full tile visibility for a test user before notifying the broader user population.",
+    "preventiveMeasures": [
+      "Establish a transport checklist for business roles that explicitly includes all referenced custom catalog/group objects as dependencies",
+      "Use a transport of copies or collective transport verification step in QA that simulates the exact production transport sequence before go-live",
+      "Assign clear ownership for Fiori content transport so it isn't assumed to travel automatically with the PFCG role transport"
+    ]
+  },
+  {
+    "id": "s4h-s5",
+    "category": "s4hana-security",
+    "title": "Data leakage across company codes in an embedded analytics report",
+    "difficulty": "Architect",
+    "situation": "An internal audit flags that several users can see profitability data for company codes outside their assigned scope on a custom embedded analytics report, even though the same users are correctly restricted on the equivalent transactional Fiori app built on the same CDS view.",
+    "troubleshootingSteps": [
+      "Confirm the transactional app's restriction is enforced via DCL referencing the classic company code authorization object",
+      "Check RSECADMIN to determine what analysis authorization, if any, restricts company code for the analytical consumption path of the same CDS view",
+      "Identify whether the affected users hold 0BI_ALL or an overly broad pattern-based restriction type on the company code characteristic",
+      "Review when and why the broad analysis authorization was granted, checking for a go-live-era temporary access decision that was never revisited",
+      "Cross-check the scope of affected users against the audit finding to confirm the full extent of the exposure"
+    ],
+    "toolsUsed": ["RSECADMIN", "PFCG"],
+    "tablesChecked": ["RSECVAL", "AGR_1251"],
+    "authObjects": ["S_RS_AUTH"],
+    "rootCause": "The affected users were granted 0BI_ALL during the original go-live to unblock analytics testing under time pressure, and it was never scoped down afterward - since DCL and analysis authorizations are independently maintained mechanisms on the same CDS view, the transactional path stayed correctly restricted while the analytical path remained fully open.",
+    "resolution": "Revoked 0BI_ALL from the affected users and provisioned correctly scoped analysis authorizations matching their transactional company code restrictions. Ran a full audit query across all users to identify any other standing 0BI_ALL assignments and remediated those in the same pass.",
+    "preventiveMeasures": [
+      "Treat 0BI_ALL as a break-glass, time-boxed grant only, with mandatory expiration and review",
+      "Add analysis authorization scope to the same periodic access review process that already covers classic role assignments",
+      "Require that any CDS view used in both transactional and analytical consumption paths have its two authorization mechanisms validated together during testing, not independently"
+    ]
+  }
+]

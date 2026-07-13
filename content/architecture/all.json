@@ -1,0 +1,86 @@
+[
+  {
+    "id": "arch-auth-flow",
+    "title": "SAP Authorization Flow (Classic ABAP)",
+    "category": "abap-authorization",
+    "description": "How a single AUTHORITY-CHECK statement resolves against a user's session authorization buffer, built at logon from role/profile assignments.",
+    "mermaid": "flowchart TD\n  A[User Logon] --> B[Kernel reads AGR_USERS / UST04]\n  B --> C[Build Authorization Buffer in Session Memory]\n  C --> D[User Executes Transaction]\n  D --> E[AUTHORITY-CHECK Statement in Code]\n  E --> F{Value in Buffer?}\n  F -->|Yes| G[sy-subrc = 0, Continue]\n  F -->|No| H[sy-subrc <> 0, Error/SU53 Entry]\n  I[Role Change] -.requires re-login/SU56.-> C"
+  },
+  {
+    "id": "arch-fiori-flow",
+    "title": "Fiori Authorization Flow",
+    "category": "fiori-security",
+    "description": "The two independent halves of Fiori access: front-end catalog/tile visibility and back-end OData authorization, both required for a working app.",
+    "mermaid": "sequenceDiagram\n  participant U as User\n  participant FLP as Fiori Launchpad\n  participant GW as Gateway/OData\n  participant BE as Backend ABAP\n  U->>FLP: Logon\n  FLP->>FLP: Check Catalog/Space Assignment\n  FLP-->>U: Render Tile (if assigned)\n  U->>GW: Open App - GET Entity Set\n  GW->>GW: Check SICF Service Active\n  GW->>BE: Forward Request\n  BE->>BE: AUTHORITY-CHECK on OData Object\n  BE-->>U: Data or 403"
+  },
+  {
+    "id": "arch-gateway-flow",
+    "title": "SAP Gateway Flow (OData / Batch)",
+    "category": "gateway-security",
+    "description": "How Gateway's IWFND and IWBEP layers process an OData call, including batch sub-operation handling.",
+    "mermaid": "flowchart LR\n  A[HTTP/OData Request] --> B[IWFND - Front-End]\n  B --> C{SICF Node Active?}\n  C -->|No| D[404 Not Found]\n  C -->|Yes| E[IWBEP - Back-End Enablement]\n  E --> F[Backend ABAP / CDS Logic]\n  F --> G[AUTHORITY-CHECK]\n  G -->|Batch Request| H[Each Sub-Operation Checked Independently]\n  G -->|Single Call| I[Direct Response]"
+  },
+  {
+    "id": "arch-btp-auth-flow",
+    "title": "SAP BTP Authentication & Authorization Flow",
+    "category": "btp-security",
+    "description": "How a BTP application authenticates a user via IAS and authorizes API calls via XSUAA-issued scoped tokens.",
+    "mermaid": "sequenceDiagram\n  participant U as User\n  participant App as BTP Application\n  participant IAS as SAP IAS\n  participant XS as XSUAA\n  U->>App: Access Request\n  App->>IAS: Redirect for Authentication\n  IAS-->>App: SAML/OIDC Assertion\n  App->>XS: Exchange for Token\n  XS-->>App: JWT with Scopes\n  App->>App: Validate Scope per API Call\n  App-->>U: Response"
+  },
+  {
+    "id": "arch-oauth-flow",
+    "title": "OAuth 2.0 SAML Bearer Assertion Flow",
+    "category": "oauth-principal-propagation",
+    "description": "How a cloud application obtains a backend-scoped token on behalf of a specific user via SAML Bearer Assertion, enabling Principal Propagation.",
+    "mermaid": "sequenceDiagram\n  participant App as Cloud App\n  participant IAS as IAS (Assertion Issuer)\n  participant BE as On-Premise OAuth Server\n  App->>IAS: Request SAML Assertion for User\n  IAS-->>App: Signed SAML Assertion\n  App->>BE: Present Assertion (SAML Bearer Grant)\n  BE->>BE: Validate Trust + Resolve Local User Mapping\n  BE-->>App: Scoped Access Token for Propagated User\n  App->>BE: API Call with Access Token"
+  },
+  {
+    "id": "arch-saml-flow",
+    "title": "SAML2 SP/IdP Assertion Exchange",
+    "category": "sso-saml-federation",
+    "description": "The classic SAML2 web SSO flow between an ABAP system acting as Service Provider and an Identity Provider.",
+    "mermaid": "sequenceDiagram\n  participant U as User Browser\n  participant SP as SAP System (Service Provider)\n  participant IdP as Identity Provider\n  U->>SP: Access Protected Resource\n  SP-->>U: Redirect to IdP (AuthnRequest)\n  U->>IdP: Authenticate\n  IdP-->>U: Signed SAML Assertion\n  U->>SP: POST Assertion to ACS URL\n  SP->>SP: Validate Signature via STRUST + Map User\n  SP-->>U: Session Granted"
+  },
+  {
+    "id": "arch-principal-propagation-flow",
+    "title": "Principal Propagation Flow",
+    "category": "oauth-principal-propagation",
+    "description": "The full chain preserving a cloud user's identity through Cloud Connector into an on-premise backend call.",
+    "mermaid": "flowchart TD\n  A[Cloud App - User Authenticated via IAS] --> B[XSUAA Issues Token]\n  B --> C[Cloud Connector]\n  C --> D{System + Resource Allowlisted?}\n  D -->|No| E[Connection Rejected]\n  D -->|Yes| F[Forward to On-Premise Backend]\n  F --> G{Principal Propagation Trust Valid?}\n  G -->|No| H[Identity Resolution Error]\n  G -->|Yes| I[Backend Resolves Local User Mapping]\n  I --> J[AUTHORITY-CHECK as Propagated User]"
+  },
+  {
+    "id": "arch-cloud-connector-flow",
+    "title": "Cloud Connector Access Control Flow",
+    "category": "oauth-principal-propagation",
+    "description": "How Cloud Connector enforces system-level and resource-level access control lists on outbound-initiated tunnels.",
+    "mermaid": "flowchart LR\n  A[On-Premise Network] --> B[Cloud Connector Agent]\n  B -->|Outbound-Initiated Tunnel| C[BTP Subaccount]\n  D[Cloud App API Call] --> C\n  C --> B\n  B --> E{System in ACL?}\n  E -->|No| F[Rejected]\n  E -->|Yes| G{Resource Path in ACL?}\n  G -->|No| F\n  G -->|Yes| H[Forward to Backend System]"
+  },
+  {
+    "id": "arch-ias-federation-flow",
+    "title": "IAS Federation to Corporate Identity Provider",
+    "category": "identity-authentication",
+    "description": "How IAS acts as both a Service Provider (to the corporate IdP) and an Identity Provider (to downstream applications) simultaneously.",
+    "mermaid": "sequenceDiagram\n  participant U as User\n  participant App as Relying Application\n  participant IAS as SAP IAS\n  participant Corp as Corporate IdP\n  U->>App: Access Request\n  App->>IAS: Redirect (App trusts IAS)\n  IAS->>Corp: Redirect (IAS trusts Corporate IdP)\n  Corp-->>IAS: Assertion\n  IAS->>IAS: Evaluate Conditional Authentication\n  IAS-->>App: New Assertion/Token (IAS as IdP)\n  App-->>U: Access Granted"
+  },
+  {
+    "id": "arch-ips-provisioning-flow",
+    "title": "IPS Provisioning Flow",
+    "category": "identity-provisioning",
+    "description": "How Identity Provisioning Service reads from a source system, applies filters and transformations, and writes to one or more targets via SCIM or RFC.",
+    "mermaid": "flowchart LR\n  A[Source System - HR/AD/IAS] -->|Read| B[IPS Job]\n  B --> C{Filter Rule}\n  C -->|Excluded| D[No Action - Silent]\n  C -->|Included| E[Apply Attribute Mapping/Transform]\n  E -->|SCIM| F[Target: IAS / BTP Subaccount]\n  E -->|RFC/BAPI| G[Target: S/4HANA]\n  B --> H[Job Log: Per-Record Success/Failure]"
+  },
+  {
+    "id": "arch-grc-arm-flow",
+    "title": "GRC Access Request Management Flow",
+    "category": "grc-sod-audit",
+    "description": "The preventive access-request pathway in SAP GRC, running risk analysis before provisioning rather than only detecting violations afterward.",
+    "mermaid": "flowchart TD\n  A[New Access Request] --> B[GRC Access Request Management]\n  B --> C[Risk Analysis Against Rule Set]\n  C --> D{Conflict Found?}\n  D -->|No| E[Auto/Approved Provisioning]\n  D -->|Yes| F[Approval Workflow]\n  F --> G{Mitigate or Remediate?}\n  G -->|Mitigate| H[Assign Mitigating Control + Recertify]\n  G -->|Remediate| I[Adjust Request - Remove Conflicting Access]\n  H --> E\n  I --> E"
+  },
+  {
+    "id": "arch-pfcg-role-creation-flow",
+    "title": "PFCG Role Creation Flow",
+    "category": "abap-authorization",
+    "description": "The end-to-end lifecycle of building a role: menu assembly, SU24-driven proposals, value maintenance, generation, and assignment.",
+    "mermaid": "flowchart TD\n  A[Add Transactions to Role Menu] --> B[PFCG Reads SU24 Check Indicators]\n  B --> C[Proposed Authorization Objects Populated]\n  C --> D[Security Consultant Maintains/Narrows Values]\n  D --> E[Organizational Level Values Entered]\n  E --> F[Generate Profile]\n  F --> G[Assign Role to User with Validity Dates]\n  G --> H[User Buffer Updated at Next Logon]"
+  }
+]

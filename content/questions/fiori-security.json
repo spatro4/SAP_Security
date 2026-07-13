@@ -1,0 +1,375 @@
+[
+  {
+    "id": "fiori-q1",
+    "category": "fiori-security",
+    "difficulty": "Easy",
+    "question": "In classic Fiori Launchpad content, what is the difference between a catalog and a group, and who is each one intended for?",
+    "hints": [
+      "One is assigned to roles, the other is user-facing arrangement",
+      "Think 'available apps' versus 'my apps'"
+    ],
+    "expectedAnswer": "A catalog is the role-assigned container of all tiles a user is entitled to (their available app inventory), while a group is a user- or admin-defined arrangement of specific tiles from that inventory for launchpad display - a catalog determines what's possible, a group determines what's shown and how it's organized.",
+    "detailedAnswer": "Catalogs are assigned to PFCG roles and represent the full set of tiles/target mappings a user is authorized to potentially access - think of it as the entitlement inventory. Groups are a separate, more presentation-oriented layer: an end user (or an admin defining a default group) picks specific tiles out of their available catalogs and arranges them into named groups that appear on the classic Fiori Launchpad home page. A user can be entitled to fifty tiles across several catalogs but only have ten of them organized into groups they actually see day to day - the rest remain reachable via app finder/search but aren't surfaced by default.",
+    "followUps": [
+      "What replaced groups as the primary organizing concept in Fiori 3 launchpads?",
+      "Can a user create their own personal groups, and does that require any special authorization?"
+    ],
+    "commonMistakes": [
+      "Assuming a catalog assignment alone determines what a user sees on their home page",
+      "Confusing group membership with actual authorization entitlement"
+    ],
+    "tcodes": [
+      "PFCG",
+      "/UI2/FLPD_CUST"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_START"
+    ],
+    "scenario": "A user has a tile pinned to their home screen that a colleague with the identical role doesn't see, causing confusion about whether their access differs.",
+    "tags": [
+      "Launchpad",
+      "Fundamentals"
+    ]
+  },
+  {
+    "id": "fiori-q2",
+    "category": "fiori-security",
+    "difficulty": "Medium",
+    "question": "What are Spaces and Pages in the Fiori 3 launchpad model, and how do they change how launchpad content gets assigned to business roles?",
+    "hints": [
+      "Spaces map roughly to job-function-level groupings, pages are the content within them",
+      "Think about how this coexists with legacy catalogs/groups"
+    ],
+    "expectedAnswer": "Spaces represent broad role-based groupings of the launchpad (similar to a top-level navigation menu per job function), pages are the content areas within a space built from sections referencing catalogs, and both are assigned to PFCG business roles via dedicated authorization-relevant fields - legacy catalogs and groups still exist underneath as the actual tile source, but spaces/pages control how that content is surfaced and organized at the launchpad UX level.",
+    "detailedAnswer": "The Fiori 3 launchpad reorganizes the end-user experience around Spaces (representing a role or job function, shown as a top-level navigation entry) containing Pages (the content area a user sees when a space is selected), with pages built from sections that ultimately reference the same underlying catalogs and their tiles/target mappings as the classic model. Spaces and pages are maintained as their own content objects (via dedicated Fiori administration apps) and assigned to business roles alongside catalog assignments in PFCG - the role still needs the catalog assignment for the authorization/target-mapping default-proposal mechanism to work, while the space/page assignment controls how that content is surfaced and grouped in the launchpad UI. This means a role redesign project touching Fiori content now has to manage three linked but distinct content types - catalogs (entitlement), groups (legacy presentation, often phased out), and spaces/pages (current presentation) - and forgetting to assign the space/page alongside the catalog is a common cause of 'user has the role but sees nothing in the launchpad.'",
+    "followUps": [
+      "What happens if a user's role has catalog assignments but no space/page assignment at all?",
+      "How would you migrate a legacy group-based launchpad configuration to spaces and pages without disrupting users mid-project?"
+    ],
+    "commonMistakes": [
+      "Assuming catalog assignment alone is sufficient in a spaces/pages-based launchpad",
+      "Not accounting for both content types when troubleshooting a 'missing tiles' issue"
+    ],
+    "tcodes": [
+      "PFCG"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_START"
+    ],
+    "scenario": "After migrating from groups to spaces and pages, a batch of users report their launchpad home page is nearly empty despite unchanged role assignments.",
+    "tags": [
+      "Launchpad",
+      "Spaces and Pages"
+    ]
+  },
+  {
+    "id": "fiori-q3",
+    "category": "fiori-security",
+    "difficulty": "Hard",
+    "question": "In a Fiori Hub deployment, how does the front-end versus back-end role split work, and what specifically lives on each side?",
+    "hints": [
+      "Front-end server hosts launchpad content and UI artifacts; back-end hosts the real business logic",
+      "Think about what a trusted RFC connection needs to bridge"
+    ],
+    "expectedAnswer": "The Front-End Server (FES) holds the PFCG roles carrying Fiori catalogs, groups/spaces, and launchpad-level authorizations (like S_START for tile launch), while the back-end system holds the actual business authorization objects (M_, F_, V_ series) that gate the real data operations - the two role sets are maintained in different systems and connected via a trusted RFC destination so a single business role split across systems still functions as one entitlement.",
+    "detailedAnswer": "In Hub deployment, the SAP Gateway/Fiori Front-End Server is a physically separate system whose PFCG roles are scoped to launchpad-level concerns: catalog and group/space assignments, the S_START authorization controlling which semantic object/action tile launches are permitted, and ICF/service-level authorizations for the UI5 application resources themselves. The actual business logic - the OData service's underlying CDS view or function module and its AUTHORITY-CHECK statements - executes in the back-end system(s), gated by classic business authorization objects that have nothing to do with the front-end server at all. The two systems are bridged by a trusted RFC destination (or, increasingly, OAuth2SAMLBearerAssertion-based principal propagation) so that when a user's request reaches the back-end, their identity carries through and the back-end evaluates its own authorization objects for that same user - meaning a 'single' business role in practice corresponds to a front-end role plus one or more back-end roles maintained independently, and both halves must be correctly provisioned for the app to actually work end to end.",
+    "followUps": [
+      "What happens to a user's access if the trust relationship between front-end and back-end breaks or expires?",
+      "How would you design role naming/versioning so the front-end and back-end halves of one logical business role stay traceable to each other?"
+    ],
+    "commonMistakes": [
+      "Assuming one PFCG role transport covers both the front-end and back-end authorization requirements",
+      "Not accounting for the trust relationship itself as a security-critical, monitorable component"
+    ],
+    "tcodes": [
+      "PFCG",
+      "SM59",
+      "/IWFND/MAINT_SERVICE"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_START",
+      "S_RFC"
+    ],
+    "scenario": "A Fiori app's tile launches correctly for a user, but every data operation inside the app fails with a backend authorization error despite the front-end role looking complete.",
+    "diagram": "sequenceDiagram\n  participant User\n  participant FES as Front-End Server (Hub)\n  participant Trust as Trusted RFC / Principal Propagation\n  participant BE as Back-End System\n  User->>FES: Launch tile (S_START check)\n  FES->>Trust: Forward OData request with user identity\n  Trust->>BE: Establish trusted session for user\n  BE->>BE: AUTHORITY-CHECK against business auth objects\n  BE-->>FES: Data or authorization error\n  FES-->>User: Render result in app",
+    "tags": [
+      "Fiori Hub",
+      "Role Design"
+    ]
+  },
+  {
+    "id": "fiori-q4",
+    "category": "fiori-security",
+    "difficulty": "Medium",
+    "question": "How does an OData service authorization object like S_SERVICE work alongside SICF activation, and why are they two separate gates?",
+    "hints": [
+      "Think of SICF as whether the door exists at all, and S_SERVICE as who's allowed through it"
+    ],
+    "expectedAnswer": "SICF activation determines whether the ICF node for the service even exists and responds (an inactive node returns a 404 regardless of who's asking), while S_SERVICE is an authorization object evaluated per-user against the service's technical name to determine whether that specific user is permitted to invoke it at all - they're independent controls and both must be satisfied before you even reach the service's own business authorization checks.",
+    "detailedAnswer": "SICF activation is a system-wide, not user-specific, on/off switch for an ICF service node - if the node is inactive, every request gets a 404 regardless of the requesting user's authorizations, which is why '404 not found' and '403 forbidden' point troubleshooting in completely different directions. Once a node is active, S_SERVICE (fields typically covering service name and type) is checked to determine whether the requesting user is permitted to invoke that specific internet/intranet service at all - this is a coarse-grained 'can this user use this service' gate, evaluated before the request ever reaches the service's own implementation logic. Only after both gates pass does the actual OData service implementation run its business-level AUTHORITY-CHECK or DCL-based checks against the real data being requested - meaning a support ticket describing 'access denied' could be failing at any of three independent layers, and jumping straight to business-role troubleshooting before confirming SICF and S_SERVICE status wastes time.",
+    "followUps": [
+      "What HTTP status codes would you expect to see at each of the three layers (SICF, S_SERVICE, business authorization) when they fail?",
+      "Why might a service work in one client but not another on the same system?"
+    ],
+    "commonMistakes": [
+      "Jumping straight to PFCG role review without first confirming the SICF node is active",
+      "Treating a 404 and a 403 as the same category of problem"
+    ],
+    "tcodes": [
+      "SICF",
+      "SU21"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_SERVICE",
+      "S_ICF"
+    ],
+    "scenario": "A newly built OData service returns 404 in production despite working perfectly in QA with identical roles and users.",
+    "tags": [
+      "SICF",
+      "OData",
+      "Authorization Objects"
+    ]
+  },
+  {
+    "id": "fiori-q5",
+    "category": "fiori-security",
+    "difficulty": "Hard",
+    "question": "Explain how CSRF token handling works for Fiori/OData requests, and what the security implication is of disabling CSRF validation on a service.",
+    "hints": [
+      "Think about why a GET request is used purely to fetch a token before any state-changing call",
+      "Consider what attack CSRF protection is actually defending against"
+    ],
+    "expectedAnswer": "The Fiori client fetches a CSRF token via a GET request carrying an 'X-CSRF-Token: Fetch' header, receives the token bound to the session in the response header, and must resend it on every subsequent state-changing request (POST/PUT/DELETE/MERGE) or the server rejects the call with a 403; disabling CSRF validation removes protection against cross-site request forgery, allowing a malicious site to potentially trigger state-changing requests using an authenticated user's active session without their knowledge.",
+    "detailedAnswer": "Before performing any state-changing operation, a well-behaved Fiori/OData client issues a GET request with the header X-CSRF-Token set to the literal value 'Fetch'; the Gateway/OData framework returns a token bound to the user's session in the response headers, which the client then must echo back in the X-CSRF-Token header on every subsequent POST, PUT, DELETE, or MERGE request in that session. If the token is missing, stale (e.g., after session timeout or logon ticket renewal), or doesn't match what the server has bound to the session, the request is rejected with a 403 CSRF token validation failed, which is a very common false alarm mistaken for an authorization problem when it's really a session/token lifecycle issue. Disabling CSRF validation on a service - technically possible via service-specific settings - removes protection against cross-site request forgery, where a malicious external page could induce a logged-in user's browser to fire a state-changing request against the SAP system using their live session cookie, without the user ever intending it; this is precisely the class of attack CSRF tokens exist to prevent, so disabling it should be treated as a serious security exception requiring compensating controls, not a routine troubleshooting shortcut.",
+    "followUps": [
+      "How would you distinguish a CSRF token failure from a genuine authorization failure when a user reports 'save' not working?",
+      "What compensating controls, if any, would make disabling CSRF validation defensible for a specific narrow use case?"
+    ],
+    "commonMistakes": [
+      "Treating a 403 CSRF failure as an authorization/role issue and escalating to the wrong team",
+      "Disabling CSRF validation as a quick fix for a token lifecycle bug without understanding the security trade-off"
+    ],
+    "tcodes": [
+      "/IWFND/MAINT_SERVICE",
+      "/IWFND/ERROR_LOG"
+    ],
+    "tables": [],
+    "authObjects": [],
+    "scenario": "Users intermittently report that saving changes in a Fiori app fails with an error, but only after leaving the app open and idle for an extended period before attempting to save.",
+    "tags": [
+      "CSRF",
+      "OData",
+      "Security Controls"
+    ]
+  },
+  {
+    "id": "fiori-q6",
+    "category": "fiori-security",
+    "difficulty": "Medium",
+    "question": "Explain the SICF service path structure for an OData service and how to distinguish 'service not activated' from 'service activated but unauthorized' during troubleshooting.",
+    "hints": [
+      "Think about the HTTP status code difference between the two failure modes"
+    ],
+    "expectedAnswer": "OData services are exposed as nodes under a structured SICF path (typically /sap/opu/odata/sap/<service_name>), and an inactive node returns a 404 for every request regardless of user, while an active-but-unauthorized scenario returns a 401/403 with an authorization-specific error body - checking SICF node activation status first immediately tells you which category of problem you're dealing with before looking at any role data.",
+    "detailedAnswer": "SAP Gateway exposes OData services under a predictable SICF path hierarchy, commonly /sap/opu/odata/sap/<service_technical_name>, with the node's activation state maintained independently of any user's authorization. If that node is inactive - a common oversight after a transport that doesn't automatically activate ICF nodes in the target system - every request against it fails with a 404 Not Found before any authorization logic runs at all. If the node is active but the requesting user lacks S_SERVICE or the underlying business authorization, the response is a 401 or 403 with a body typically containing a more specific OData error message referencing the failed check. This distinction matters operationally: a flood of 404s across all users points straight at SICF activation as the very first thing to check, while a 401/403 affecting only some users points at role/authorization data - conflating the two wastes triage time chasing role assignments for what's actually a missed activation step.",
+    "followUps": [
+      "Why might SICF activation get missed specifically after a transport to a new system, even when it worked in the source system?",
+      "What would you check if the service returns 200 OK but with an empty or unexpectedly filtered result set?"
+    ],
+    "commonMistakes": [
+      "Investigating role assignments before confirming the SICF node is even active",
+      "Assuming SICF activation transports automatically with the OData service development objects"
+    ],
+    "tcodes": [
+      "SICF",
+      "/IWFND/MAINT_SERVICE"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_ICF"
+    ],
+    "scenario": "A Fiori app that worked in QA fails entirely for every user in production immediately after go-live, with no user-specific pattern to the failures.",
+    "tags": [
+      "SICF",
+      "OData",
+      "Troubleshooting"
+    ]
+  },
+  {
+    "id": "fiori-q7",
+    "category": "fiori-security",
+    "difficulty": "Architect",
+    "question": "After an HR reorganization, derived roles built on org-management-linked structures start granting access to the wrong scope. Design an approach to detect and prevent this org-value staleness going forward.",
+    "hints": [
+      "Think about the gap between when an org change happens in HR and when it's reflected in derived role org values",
+      "Consider both detection (reconciliation) and prevention (automation) layers"
+    ],
+    "expectedAnswer": "Build an automated trigger that regenerates or flags affected derived roles whenever the linked HR org structure changes, backed by a periodic reconciliation job comparing current HR org assignments against derived role org values so drift is caught even if the automated trigger fails or misses an edge case.",
+    "detailedAnswer": "Derived roles whose org-level values are sourced from or aligned with an HR organizational management structure (cost center, company code, or org unit hierarchies tied to position/org assignments) go stale the moment that structure changes but the derived role isn't regenerated - a routine reorg, cost center realignment, or reporting-line change can silently leave users with the wrong scope of access, sometimes broader than intended (a security risk) and sometimes narrower (a productivity-blocking incident). The architecture needs two layers: a proactive trigger integrated into the HR-to-SAP change process that flags or automatically regenerates affected derived roles whenever a relevant org structure change is detected, and an independent, periodic reconciliation job that queries current HR org assignments against the org values actually baked into derived roles, alerting on any mismatch regardless of whether the proactive trigger fired correctly. Relying on the proactive trigger alone is fragile because reorg events don't always flow through the expected integration path (manual HR corrections, retroactive-dated changes, or bulk org restructuring events are common ways the trigger gets bypassed).",
+    "followUps": [
+      "How would you handle a retroactively-dated org change that already caused several weeks of incorrect access before being detected?",
+      "Would you architect this differently for a company using Employee Central versus on-premise HR org management?"
+    ],
+    "commonMistakes": [
+      "Relying solely on an automated trigger without an independent reconciliation safety net",
+      "Not accounting for retroactively-dated HR changes that bypass real-time triggers"
+    ],
+    "tcodes": [
+      "PFCG",
+      "PPOME"
+    ],
+    "tables": [
+      "AGR_1251",
+      "AGR_USERS"
+    ],
+    "authObjects": [],
+    "scenario": "A quarterly reorganization moved 200 employees to new cost centers, and three weeks later several of them are found to still have derived-role access scoped to their old cost center.",
+    "tags": [
+      "Derived Roles",
+      "HR Integration",
+      "Governance"
+    ]
+  },
+  {
+    "id": "fiori-q8",
+    "category": "fiori-security",
+    "difficulty": "Hard",
+    "question": "In a multi-backend Fiori Hub deployment, how would you govern the front-end and back-end role landscapes together across several connected backend systems?",
+    "hints": [
+      "Think about system alias mapping per backend and how role naming needs to reflect it",
+      "Consider trust relationship management as its own governed process"
+    ],
+    "expectedAnswer": "Establish a role naming and mapping convention that makes the front-end catalog/role explicitly traceable to each backend's corresponding role via the system alias it targets, and treat the trusted RFC connections themselves as governed, monitored security objects with their own lifecycle rather than a one-time setup task.",
+    "detailedAnswer": "With one Front-End Server hubbing multiple backend systems, each Fiori app's OData service is routed to a specific backend via a system alias mapping maintained in the Gateway service activation configuration - meaning the 'same' app tile can point at entirely different backends for different business roles, and role governance has to track that explicitly rather than assuming a 1:1 relationship between a front-end catalog and a single backend role. A workable naming/mapping convention ties the front-end business role name to the specific backend system(s) and role(s) it depends on, so an auditor or support engineer can trace end to end without tribal knowledge. Equally important, the trusted RFC destinations (or SAML-based principal propagation trust) connecting the hub to each backend are themselves security-critical objects that need their own governance - periodic review of trust configuration, alerting on trust relationship changes or expiry, and inclusion in the standard security architecture documentation - rather than being treated as a one-time technical setup step forgotten once the initial integration works.",
+    "followUps": [
+      "How would you detect a system alias silently pointing a service at the wrong backend after a configuration change?",
+      "What would you monitor to catch a trust relationship degrading before it causes a production outage?"
+    ],
+    "commonMistakes": [
+      "Assuming a 1:1 relationship between front-end catalogs and backend roles in a multi-backend hub",
+      "Treating trust relationship configuration as a one-time setup task rather than an ongoing governed control"
+    ],
+    "tcodes": [
+      "/IWFND/MAINT_SERVICE",
+      "SM59",
+      "PFCG"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_RFC"
+    ],
+    "scenario": "A Fiori Hub serving three regional backend systems experiences a production incident where one app's tile works for two regions but silently returns another region's data for the third.",
+    "diagram": "flowchart TD\n  Hub[Fiori Front-End Server / Hub] -->|System Alias A| BE1[Backend System 1]\n  Hub -->|System Alias B| BE2[Backend System 2]\n  Hub -->|System Alias C - Misconfigured| BE3[Backend System 3]\n  BE3 -.wrong alias mapping.-> BE2\n  style BE3 fill:#f96",
+    "tags": [
+      "Fiori Hub",
+      "Governance"
+    ]
+  },
+  {
+    "id": "fiori-q9",
+    "category": "fiori-security",
+    "difficulty": "Manager",
+    "question": "Business teams keep requesting new custom Fiori catalogs for minor tile variations, leading to catalog sprawl. How would you govern this without blocking legitimate business needs?",
+    "hints": [
+      "Think about a lightweight approval gate plus a default-to-reuse policy",
+      "Consider what actually drives the proliferation - is it a real need or a process shortcut?"
+    ],
+    "expectedAnswer": "Introduce a lightweight governance gate requiring any new custom catalog request to first justify why an existing standard or already-created custom catalog can't be reused or extended, combined with periodic catalog rationalization reviews to consolidate near-duplicate content that has already accumulated.",
+    "detailedAnswer": "Catalog sprawl usually isn't driven by genuinely distinct business needs - it's driven by the path of least resistance being 'create a new catalog for my team' rather than checking whether an existing one already covers the need with minor tile-level additions. The fix is process, not tooling: require any new custom catalog request to go through a brief review confirming no existing catalog can be reused or extended first, and make the reviewer's default answer 'extend/reuse' rather than 'approve new.' Alongside that forward-looking gate, run a periodic rationalization pass over existing custom catalogs to identify and consolidate near-duplicates that already accumulated before the gate was in place - this is a much lighter lift than a wholesale Fiori content redesign and delivers most of the long-term maintainability benefit.",
+    "followUps": [
+      "How would you measure whether the governance gate is actually working versus just adding bureaucratic friction?",
+      "How would you handle a business unit that insists their tile variation is genuinely unique?"
+    ],
+    "commonMistakes": [
+      "Adding a heavy approval process that just slows business down without addressing the root cause",
+      "Not periodically rationalizing catalogs that already accumulated before the new process started"
+    ],
+    "tcodes": [
+      "PFCG"
+    ],
+    "tables": [],
+    "authObjects": [],
+    "scenario": "An internal review finds over 300 custom Fiori catalogs, many differing from an existing one by a single tile, after eighteen months of a Fiori rollout program.",
+    "tags": [
+      "Governance",
+      "Leadership",
+      "Fiori Catalogs"
+    ]
+  },
+  {
+    "id": "fiori-q10",
+    "category": "fiori-security",
+    "difficulty": "Principal Architect",
+    "question": "Design an enterprise Fiori security architecture for a multi-backend Hub landscape that must also support single sign-on and a controlled content lifecycle across Dev/QA/Production.",
+    "hints": [
+      "Think about trust architecture, transport strategy for Fiori-specific content types, and where SSO is actually terminated",
+      "Consider that Fiori content (catalogs/groups/spaces) and PFCG roles have related but distinct transport paths"
+    ],
+    "expectedAnswer": "Architect a central Front-End hub with SSO terminated at the hub (via SAML/X.509 to the identity provider) and principal propagation extending that trust into each backend, a naming and dependency convention linking front-end and back-end role content across systems, and an explicit transport governance process that moves PFCG roles and Fiori launchpad content (catalogs, groups, spaces/pages) together as a coordinated unit through Dev/QA/Production rather than as independently-timed transports.",
+    "detailedAnswer": "The architecture centers on the Front-End Server as the single point where users authenticate - SSO is terminated there via SAML2 or a comparable federation protocol against the corporate identity provider, and that authenticated identity is then propagated to each backend system through trusted RFC or OAuth2SAMLBearerAssertion-based principal propagation, meaning the trust configuration between hub and every backend becomes a security-critical architectural component in its own right, not an afterthought. Role and content governance needs an explicit naming/dependency convention that ties each front-end business role to the specific backend role(s) and system alias mapping it depends on, so the landscape stays traceable as it scales to more backends. The transport strategy is the piece most often under-designed: PFCG roles, Fiori launchpad content (catalogs, groups, spaces/pages), and any custom CDS/OData development objects each have their own transportable object types and can easily land in a target system out of sync with each other if governed as independent transport streams - the architecture should define a coordinated release/transport process (a single change package moving all related object types together through Dev/QA/Production) specifically to prevent the common failure mode where a role goes live before its referenced Fiori content, or vice versa, leaving users in a broken intermediate state.",
+    "followUps": [
+      "How would you extend this architecture to accommodate a BTP-based extension app alongside the on-premise Hub landscape?",
+      "What would you monitor continuously to detect the trust relationship or content synchronization degrading in production?"
+    ],
+    "commonMistakes": [
+      "Treating SSO/trust configuration as a one-time setup rather than an ongoing governed security control",
+      "Allowing PFCG role transports and Fiori content transports to move through the landscape on independent, unsynchronized schedules"
+    ],
+    "tcodes": [
+      "PFCG",
+      "SM59",
+      "STMS",
+      "/IWFND/MAINT_SERVICE"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_RFC",
+      "S_START"
+    ],
+    "scenario": "A global enterprise is standing up a Fiori Hub in front of six regional backend systems with a mandate for single sign-on and a governed Dev/QA/Production content lifecycle.",
+    "diagram": "flowchart TD\n  IdP[Corporate Identity Provider] -->|SAML SSO| Hub[Fiori Front-End Hub]\n  Hub -->|Principal Propagation| BE1[Backend Region 1]\n  Hub -->|Principal Propagation| BE2[Backend Region 2]\n  Hub -->|Principal Propagation| BE3[Backend Region 3-6]\n  Dev[Dev: Roles + Fiori Content] --> QA[QA: Coordinated Transport]\n  QA --> Prod[Production: Coordinated Transport]\n  Prod --> Hub",
+    "tags": [
+      "Architecture",
+      "SSO"
+    ]
+  },
+  {
+    "id": "fiori-q11",
+    "category": "fiori-security",
+    "difficulty": "Hard",
+    "question": "How is OData entity-set-level authorization actually enforced for a CDS-based service, and how would you troubleshoot an app that returns HTTP 200 with an empty entity set versus one that returns a 403?",
+    "hints": [
+      "Think about where DCL/authorization objects fit relative to the OData protocol layer",
+      "A 200 with empty data and a 403 point to different layers of the stack failing"
+    ],
+    "expectedAnswer": "A CDS-based OData service enforces authorization through the underlying view's DCL/classic authorization objects, which filter or block rows at the data layer beneath the OData protocol - a 403 typically means a protocol/service-level gate failed (SICF, S_SERVICE, CSRF), while a 200 with an empty entity set means the request was permitted at the protocol level but the DCL row filter (or a genuine data condition) removed every row.",
+    "detailedAnswer": "For a CDS-based OData service, authorization enforcement happens at two conceptually different layers: the OData/Gateway protocol layer (SICF activation, S_SERVICE, CSRF token validation) which either allows or rejects the request outright with a corresponding HTTP status, and the data layer beneath it, where the CDS view's DCL role definition filters rows via its WHERE condition referencing a classic authorization object. A 403 response almost always indicates a protocol-layer or coarse-grained authorization gate rejected the request before it ever reached the actual data query - check SICF activation, S_SERVICE, and CSRF token state first. A 200 OK with an empty entity set means the request was permitted through every protocol-layer gate and the query executed successfully, but the DCL WHERE filter (or a legitimate absence of matching data) resulted in zero rows - this is functionally indistinguishable from 'there's just no data' at the HTTP level, which is exactly why DCL-filtered results don't throw errors and require checking the user's authorization buffer values directly rather than relying on the app's error handling to surface anything.",
+    "followUps": [
+      "Why is a 200-with-empty-result harder to triage than an explicit 403, from a support ticket perspective?",
+      "How would you build monitoring to distinguish 'expected empty result' from 'authorization-filtered empty result' at scale?"
+    ],
+    "commonMistakes": [
+      "Treating an empty entity set as a data problem without checking DCL/authorization filtering first",
+      "Not distinguishing which HTTP status code points to which layer of the stack when triaging"
+    ],
+    "tcodes": [
+      "/IWFND/ERROR_LOG",
+      "/IWBEP/ERROR_LOG",
+      "SU53"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_SERVICE"
+    ],
+    "scenario": "A support ticket describes a Fiori app as 'broken' with no further detail; initial investigation shows the app loads and returns HTTP 200, but the list is always empty for this one user.",
+    "tags": [
+      "OData",
+      "CDS",
+      "Troubleshooting"
+    ]
+  }
+]

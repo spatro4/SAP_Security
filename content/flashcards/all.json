@@ -1,0 +1,722 @@
+[
+  {
+    "id": "fc-001",
+    "category": "ecc-security",
+    "front": "What is an authorization object?",
+    "back": "A template of up to 10 related fields that must all be checked together for a business function; e.g., S_TCODE checks the TCD field for transaction start."
+  },
+  {
+    "id": "fc-002",
+    "category": "ecc-security",
+    "front": "What does the AUTHORITY-CHECK statement do?",
+    "back": "It checks whether the user's authorization buffer contains an authorization for the given object with values satisfying every field specified, returning sy-subrc 0 on success."
+  },
+  {
+    "id": "fc-003",
+    "category": "ecc-security",
+    "front": "What is the user buffer?",
+    "back": "The in-memory table of all authorizations a user holds, built at logon from every assigned role and profile; AUTHORITY-CHECK reads this buffer at runtime, not the database."
+  },
+  {
+    "id": "fc-004",
+    "category": "ecc-security",
+    "front": "What's the difference between a profile and an authorization?",
+    "back": "A profile is the generated technical object referenced in the user master and loaded into the buffer; an authorization is one specific instance of an authorization object with field values filled in."
+  },
+  {
+    "id": "fc-005",
+    "category": "ecc-security",
+    "front": "What does S_TCODE control?",
+    "back": "Whether a user may start a given transaction code; it only gates transaction start, not the deeper authority checks performed inside that transaction's own code."
+  },
+  {
+    "id": "fc-006",
+    "category": "ecc-security",
+    "front": "What is a check indicator in SU24?",
+    "back": "A flag per transaction/object pair - Check/Maintain, Check, No Check, or Unmaintained - that determines whether PFCG proposes the object and, for No Check, whether AUTHORITY-CHECK is skipped entirely."
+  },
+  {
+    "id": "fc-007",
+    "category": "ecc-security",
+    "front": "What do ACTVT values 01, 02, 03 mean?",
+    "back": "01 = Create, 02 = Change, 03 = Display, in the standard SAP activity value convention used across most authorization objects."
+  },
+  {
+    "id": "fc-008",
+    "category": "ecc-security",
+    "front": "What is table USR02 used for?",
+    "back": "It stores core user master authentication data, including the password hash and account validity dates - the base table behind SU01."
+  },
+  {
+    "id": "fc-009",
+    "category": "s4hana-security",
+    "front": "Why can a SAP_ALL user still be locked out of the Fiori launchpad?",
+    "back": "SAP_ALL grants backend authority but doesn't provision Fiori catalogs/groups (or spaces/pages) or OData service authorizations, so the launchpad UI layer can still deny access."
+  },
+  {
+    "id": "fc-010",
+    "category": "s4hana-security",
+    "front": "What is a business role in S/4HANA?",
+    "back": "A PFCG role bundling Fiori catalogs, groups/spaces, and backend authorizations aligned to a specific job function, rather than a technical module-based role."
+  },
+  {
+    "id": "fc-011",
+    "category": "s4hana-security",
+    "front": "What is DCL (Data Control Language) in S/4HANA?",
+    "back": "A CDS artifact type using @AccessControl.authorizationCheck to define row-level authorization restrictions on a CDS view, typically referencing an analysis authorization."
+  },
+  {
+    "id": "fc-012",
+    "category": "s4hana-security",
+    "front": "How does S/4HANA embedded analytics enforce field-level security?",
+    "back": "Through analysis authorizations linked to CDS annotations or InfoObjects, restricting which characteristic values (e.g., company code, region) a user can see in query results."
+  },
+  {
+    "id": "fc-013",
+    "category": "s4hana-security",
+    "front": "What is the audit risk of assigning SAP_ALL in S/4HANA?",
+    "back": "It collapses every segregation-of-duties boundary by granting unrestricted authority across all modules, making it a near-automatic GRC violation and audit finding."
+  },
+  {
+    "id": "fc-014",
+    "category": "s4hana-security",
+    "front": "What is a Fiori Space in S/4HANA?",
+    "back": "A launchpad content container in the spaces/pages model that groups pages of tiles and is assigned to business roles, replacing the flatter classic group-based launchpad structure."
+  },
+  {
+    "id": "fc-015",
+    "category": "s4hana-security",
+    "front": "What does authorization object S_RS_AUTH relate to?",
+    "back": "It links a role to a BW/embedded-analytics analysis authorization name, which then restricts the characteristic values a user can see in reporting."
+  },
+  {
+    "id": "fc-016",
+    "category": "s4hana-security",
+    "front": "How does S4HANA typically restructure legacy technical-module PFCG roles?",
+    "back": "Around business roles combining Fiori app access and backend authorizations by job function, so a single business role reflects what a person actually does rather than a module boundary."
+  },
+  {
+    "id": "fc-017",
+    "category": "fiori-security",
+    "front": "What is a Fiori catalog?",
+    "back": "A design-time container of tiles and target mappings pointing to apps; catalogs are assigned to PFCG roles and are the security-relevant grouping construct."
+  },
+  {
+    "id": "fc-018",
+    "category": "fiori-security",
+    "front": "What is a Fiori group?",
+    "back": "A runtime, end-user-facing arrangement of tiles on the classic launchpad home page; groups only affect layout and grant nothing on their own."
+  },
+  {
+    "id": "fc-019",
+    "category": "fiori-security",
+    "front": "Catalog vs. group - which one is security-relevant?",
+    "back": "The catalog. Assigning a catalog to a role grants access to the apps inside it; groups are purely cosmetic and carry no authorization meaning."
+  },
+  {
+    "id": "fc-020",
+    "category": "fiori-security",
+    "front": "What is a target mapping?",
+    "back": "The launchpad configuration linking a tile to its actual application - transaction, Web Dynpro, or SAPUI5 app - including the OData service and parameters it launches with."
+  },
+  {
+    "id": "fc-021",
+    "category": "fiori-security",
+    "front": "What is the difference between a Fiori Page and a Fiori Space?",
+    "back": "A Page is a collection of sections containing tiles/apps; a Space groups one or more Pages under a single navigation entry, and both are assigned to business roles."
+  },
+  {
+    "id": "fc-022",
+    "category": "fiori-security",
+    "front": "How do you troubleshoot a missing Fiori tile for a user?",
+    "back": "Check catalog/group (or space/page) assignment in the business role first, then verify the underlying OData service is active in SICF and authorized - a visible tile can still fail at the backend layer."
+  },
+  {
+    "id": "fc-023",
+    "category": "fiori-security",
+    "front": "What does authorization object S_UI2_ADMIN control?",
+    "back": "Administrative functions in the Fiori Launchpad Designer, such as who can create/edit catalogs, groups, and target mappings, distinct from who can consume them."
+  },
+  {
+    "id": "fc-024",
+    "category": "fiori-security",
+    "front": "Why can a tile be visible but still return a 403 when clicked?",
+    "back": "Because tile visibility depends only on catalog/group assignment, while actually running the app requires the underlying OData service and business data authorization to also pass."
+  },
+  {
+    "id": "fc-025",
+    "category": "gateway-security",
+    "front": "What is SICF?",
+    "back": "The transaction to maintain the Internet Communication Framework service tree - the HTTP/HTTPS services that must be activated before any OData, Fiori, or Web Dynpro service is reachable."
+  },
+  {
+    "id": "fc-026",
+    "category": "gateway-security",
+    "front": "What does the Gateway ACL (reginfo/secinfo) actually control?",
+    "back": "RFC gateway access control - which external programs may register with or be started by the SAP gateway - hardening against unauthorized RFC server registration, distinct from OData authorization."
+  },
+  {
+    "id": "fc-027",
+    "category": "gateway-security",
+    "front": "What is a CSRF token and why does Gateway require it?",
+    "back": "A Cross-Site Request Forgery token fetched via a preceding GET with header X-CSRF-Token: Fetch, required on any state-changing POST/PUT/DELETE OData call to prevent forged cross-site requests."
+  },
+  {
+    "id": "fc-028",
+    "category": "gateway-security",
+    "front": "What authorization object controls OData service exposure?",
+    "back": "S_SERVICE controls whether a user can call a specific external service alias, on top of the standard authority checks performed inside the service implementation itself."
+  },
+  {
+    "id": "fc-029",
+    "category": "gateway-security",
+    "front": "What does /IWFND/MAINT_SERVICE do?",
+    "back": "Registers and activates OData services on the Gateway hub, linking a technical service to its backend system alias and controlling which services are exposed at all."
+  },
+  {
+    "id": "fc-030",
+    "category": "gateway-security",
+    "front": "What's the difference between Gateway hub and embedded deployment?",
+    "back": "Hub deployment runs Gateway as a separate system routing to multiple backends; embedded deployment runs Gateway within the backend ABAP stack itself, common in S/4HANA."
+  },
+  {
+    "id": "fc-031",
+    "category": "gateway-security",
+    "front": "How does Gateway authorize a $batch (multipart) request?",
+    "back": "Each individual operation inside the batch is separately authorization-checked as if it were called standalone, even though the client sent them as one bundled HTTP request."
+  },
+  {
+    "id": "fc-032",
+    "category": "gateway-security",
+    "front": "Where would you look for Gateway-level request failures?",
+    "back": "/IWFND/ERROR_LOG on the Gateway hub for request-level failures, and the /IWBEP/ traces on the backend side for service builder/model provider issues."
+  },
+  {
+    "id": "fc-033",
+    "category": "abap-authorization",
+    "front": "What does SU25 step 2A/2B do?",
+    "back": "It compares SAP's newly delivered check indicator defaults against the customer's current USOBX_C/USOBT_C entries after an upgrade or support pack, flagging differences for review."
+  },
+  {
+    "id": "fc-034",
+    "category": "abap-authorization",
+    "front": "What is the maximum number of fields an authorization object can have?",
+    "back": "10 fields, defined via transaction SU21 and stored in table TOBJ, with TOBJVAR holding the associated field list."
+  },
+  {
+    "id": "fc-035",
+    "category": "abap-authorization",
+    "front": "What's the difference between USOBX_C and USOBT_C?",
+    "back": "USOBX_C stores the check indicator (whether an object is checked/proposed) per transaction; USOBT_C stores the actual default field values PFCG proposes for that transaction-object pair."
+  },
+  {
+    "id": "fc-036",
+    "category": "abap-authorization",
+    "front": "What does 'Adjust Derived Roles' do in PFCG?",
+    "back": "It propagates menu and non-organizational authorization changes from a master role down to all derived child roles, which then only need their org-level values re-entered."
+  },
+  {
+    "id": "fc-037",
+    "category": "abap-authorization",
+    "front": "What is table AGR_USERS used for?",
+    "back": "It stores user-to-role assignments with validity dates - the authoritative source behind 'which users have which roles' reporting in SUIM."
+  },
+  {
+    "id": "fc-038",
+    "category": "abap-authorization",
+    "front": "What is the audit risk of setting a check indicator to 'No Check' in SU24?",
+    "back": "It disables the AUTHORITY-CHECK for that object/transaction pair system-wide for every user, not just a convenience skip - a major audit and SoD exposure if misapplied."
+  },
+  {
+    "id": "fc-039",
+    "category": "abap-authorization",
+    "front": "What is table AGR_1251 used for?",
+    "back": "It stores the authorization data - objects and field values - maintained in a role's authorization tab, keyed by role and authorization object."
+  },
+  {
+    "id": "fc-040",
+    "category": "abap-authorization",
+    "front": "Composite role vs. derived role - what's the key difference?",
+    "back": "A composite role bundles other roles purely for assignment convenience and holds no authorization data itself; a derived role inherits menu and non-org data from a master role and needs only org-level values re-entered."
+  },
+  {
+    "id": "fc-041",
+    "category": "authorization-troubleshooting",
+    "front": "What does SU53 show?",
+    "back": "The last failed (or last performed) authorization check for the current user's session only - a point-in-time snapshot, not a trace over time."
+  },
+  {
+    "id": "fc-042",
+    "category": "authorization-troubleshooting",
+    "front": "What is STAUTHTRACE used for?",
+    "back": "System trace for authorization checks (successor to ST01's authorization trace component) that records every AUTHORITY-CHECK call across a defined time window and across users."
+  },
+  {
+    "id": "fc-043",
+    "category": "authorization-troubleshooting",
+    "front": "When would SU53 mislead you?",
+    "back": "When a later, unrelated successful check overwrote the real failure in the session, or the failure happened in a background job - SU53 only shows the single most recent check."
+  },
+  {
+    "id": "fc-044",
+    "category": "authorization-troubleshooting",
+    "front": "What is SUIM used for?",
+    "back": "The User Information System - a menu of reports for auditing users, roles, profiles, and authorization assignments, e.g., 'users with critical authorizations'."
+  },
+  {
+    "id": "fc-045",
+    "category": "authorization-troubleshooting",
+    "front": "What is ST01 in the context of authorization troubleshooting?",
+    "back": "The classic System Trace transaction; its authorization trace component was superseded by STAUTHTRACE, though ST01 still covers RFC, table access, and kernel call traces."
+  },
+  {
+    "id": "fc-046",
+    "category": "authorization-troubleshooting",
+    "front": "How do you trace an authorization failure inside a background job?",
+    "back": "Enable STAUTHTRACE for the job's user before it runs, since background jobs don't produce the same interactive SU53-visible session as dialog work."
+  },
+  {
+    "id": "fc-047",
+    "category": "authorization-troubleshooting",
+    "front": "What does an authorization trace record that SU53 doesn't?",
+    "back": "Every single AUTHORITY-CHECK call - passed and failed - across the entire trace window, letting you see the full sequence rather than just the last check."
+  },
+  {
+    "id": "fc-048",
+    "category": "authorization-troubleshooting",
+    "front": "Why is SU24 not authoritative for what a program actually checks at runtime?",
+    "back": "SU24 only reflects proposal/default-value configuration for PFCG; the actual runtime enforcement is whatever AUTHORITY-CHECK calls exist in the code, which a trace like STAUTHTRACE reveals directly."
+  },
+  {
+    "id": "fc-049",
+    "category": "btp-security",
+    "front": "What is XSUAA?",
+    "back": "The Extended Services for User Account and Authentication - BTP's OAuth authorization server that issues JWT tokens carrying scopes derived from a user's assigned role collections."
+  },
+  {
+    "id": "fc-050",
+    "category": "btp-security",
+    "front": "What is a scope in XSUAA?",
+    "back": "A fine-grained permission string (e.g., $XSAPPNAME.Display) defined in the app's xs-security.json, bundled into role templates and ultimately role collections assigned to users."
+  },
+  {
+    "id": "fc-051",
+    "category": "btp-security",
+    "front": "What is a role collection?",
+    "back": "The BTP-level assignable unit that bundles one or more role templates - possibly from multiple applications - and is assigned directly to users or user groups."
+  },
+  {
+    "id": "fc-052",
+    "category": "btp-security",
+    "front": "What is xs-security.json?",
+    "back": "The security descriptor deployed with an XSUAA service instance, defining scopes, role templates, attributes, and OAuth grant configuration for the application."
+  },
+  {
+    "id": "fc-053",
+    "category": "btp-security",
+    "front": "Role template vs. role collection - what's the difference?",
+    "back": "A role template is application-defined and ships with the app; a role collection is customer-defined at the subaccount level, bundling one or more role templates for actual user assignment."
+  },
+  {
+    "id": "fc-054",
+    "category": "btp-security",
+    "front": "What is a subaccount in BTP?",
+    "back": "The tenant-level administrative and billing boundary in BTP containing subscriptions, service instances, and security configuration such as trust and role collections."
+  },
+  {
+    "id": "fc-055",
+    "category": "btp-security",
+    "front": "How does XSUAA validate an incoming token?",
+    "back": "It verifies the JWT signature against its own signing key, checks expiry and audience/scope claims; the application middleware then maps scopes to authorization decisions in code."
+  },
+  {
+    "id": "fc-056",
+    "category": "btp-security",
+    "front": "What makes a multi-tenant BTP application's security model different?",
+    "back": "XSUAA runs in broker mode issuing tenant-specific tokens, and trust must be established between each consumer subaccount's identity zone and the provider's IAS tenant."
+  },
+  {
+    "id": "fc-057",
+    "category": "identity-authentication",
+    "front": "What is SAP Cloud Identity Services - Identity Authentication (IAS)?",
+    "back": "SAP's cloud identity provider and authentication broker that federates trust to corporate IdPs and issues SAML assertions/OIDC tokens to BTP and on-premise applications."
+  },
+  {
+    "id": "fc-058",
+    "category": "identity-authentication",
+    "front": "What is a corporate identity provider in IAS?",
+    "back": "An external IdP (e.g., Azure AD, ADFS, Ping) trusted by IAS so IAS can act purely as a broker, forwarding authentication rather than managing passwords itself."
+  },
+  {
+    "id": "fc-059",
+    "category": "identity-authentication",
+    "front": "What is conditional authentication in IAS?",
+    "back": "Risk-based rules that select an authentication method - e.g., step-up MFA - based on conditions like network range, user group, or target application, rather than one fixed method for everyone."
+  },
+  {
+    "id": "fc-060",
+    "category": "identity-authentication",
+    "front": "What is an application in IAS terminology?",
+    "back": "A configured relying party (SAML SP or OIDC RP) registered in IAS, defining its assertion attributes, NameID format, and which identity provider it authenticates against."
+  },
+  {
+    "id": "fc-061",
+    "category": "identity-authentication",
+    "front": "What is risk-based authentication?",
+    "back": "Adaptive MFA enforcement that steps up authentication strength based on contextual signals like unusual location or device, rather than requiring the strongest factor for every login."
+  },
+  {
+    "id": "fc-062",
+    "category": "identity-authentication",
+    "front": "Default identity provider vs. corporate identity provider in IAS?",
+    "back": "The default IdP is IAS's own user store; a corporate identity provider delegates authentication to an external, customer-managed IdP - both can coexist per application via routing rules."
+  },
+  {
+    "id": "fc-063",
+    "category": "identity-authentication",
+    "front": "What is a trust configuration in IAS?",
+    "back": "The metadata exchange - certificates, entity IDs, endpoints - establishing a SAML or OIDC federation relationship between IAS and either an application or an upstream corporate IdP."
+  },
+  {
+    "id": "fc-064",
+    "category": "identity-authentication",
+    "front": "How does IAS enable SSO into on-premise ABAP systems?",
+    "back": "IAS acts as the SAML2 identity provider trusted by the ABAP system's SAML2 configuration, letting users authenticate once via corporate IdP and reach on-premise systems without a separate logon."
+  },
+  {
+    "id": "fc-065",
+    "category": "identity-provisioning",
+    "front": "What is SAP Cloud Identity Services - Identity Provisioning (IPS)?",
+    "back": "A cloud service that synchronizes users and groups between source systems (e.g., SuccessFactors, on-premise AD) and target systems (e.g., BTP, IAS, S/4HANA) on a scheduled or event basis."
+  },
+  {
+    "id": "fc-066",
+    "category": "identity-provisioning",
+    "front": "What is a source system in IPS?",
+    "back": "The authoritative system IPS reads identities from - e.g., SuccessFactors Employee Central - feeding the provisioning pipeline."
+  },
+  {
+    "id": "fc-067",
+    "category": "identity-provisioning",
+    "front": "What is a target system in IPS?",
+    "back": "The system IPS provisions or deprovisions users into, such as IAS, a BTP subaccount, or an ABAP system via SCIM, based on mappings from the source."
+  },
+  {
+    "id": "fc-068",
+    "category": "identity-provisioning",
+    "front": "What is SCIM in the IPS context?",
+    "back": "System for Cross-domain Identity Management - the REST/JSON protocol IPS uses to create, update, and deactivate users and groups on target systems in a standardized way."
+  },
+  {
+    "id": "fc-069",
+    "category": "identity-provisioning",
+    "front": "What is attribute mapping in IPS?",
+    "back": "The configuration translating source system fields (e.g., department) into target system attributes, including transformations and conditional mapping rules."
+  },
+  {
+    "id": "fc-070",
+    "category": "identity-provisioning",
+    "front": "How do you troubleshoot a failed IPS provisioning job?",
+    "back": "Check the job log in the IPS admin console for the specific user/error, verify the attribute mapping didn't produce an invalid or duplicate value, and confirm target system connectivity is valid."
+  },
+  {
+    "id": "fc-071",
+    "category": "identity-provisioning",
+    "front": "What is a provisioning schedule in IPS?",
+    "back": "The frequency at which IPS polls the source system for delta changes and pushes them to configured targets, typically every few minutes to daily."
+  },
+  {
+    "id": "fc-072",
+    "category": "identity-provisioning",
+    "front": "What happens when a user is deactivated in the IPS source system?",
+    "back": "IPS propagates a deactivation event to all target systems per their configured mapping, typically locking or disabling the corresponding target account rather than deleting it outright."
+  },
+  {
+    "id": "fc-073",
+    "category": "sso-saml-federation",
+    "front": "What is a SAML assertion?",
+    "back": "An XML security token issued by an IdP after successful authentication, containing the subject (NameID), conditions, and attribute statements consumed by the SP to establish a session."
+  },
+  {
+    "id": "fc-074",
+    "category": "sso-saml-federation",
+    "front": "SP-initiated vs. IdP-initiated SAML flow?",
+    "back": "SP-initiated starts at the application, which redirects to the IdP with an AuthnRequest; IdP-initiated starts at the IdP's own portal with no preceding request and is generally considered less secure."
+  },
+  {
+    "id": "fc-075",
+    "category": "sso-saml-federation",
+    "front": "What does transaction SAML2 configure in an ABAP system?",
+    "back": "The system's role as a SAML2 service provider (or identity provider), including trusted IdP metadata, NameID-to-user mapping, and assertion consumer service endpoints."
+  },
+  {
+    "id": "fc-076",
+    "category": "sso-saml-federation",
+    "front": "What is SNC (Secure Network Communications)?",
+    "back": "SAP's protocol-level encryption/authentication layer for SAPGUI and RFC connections, typically backed by Kerberos or X.509 certificates, distinct from HTTPS which secures web traffic."
+  },
+  {
+    "id": "fc-077",
+    "category": "sso-saml-federation",
+    "front": "What is a Kerberos SPN in SAP SSO?",
+    "back": "A Service Principal Name registered in Active Directory that a Kerberos client requests a ticket for, mapped to the SAP system's SNC identity to enable seamless Windows SSO into SAPGUI."
+  },
+  {
+    "id": "fc-078",
+    "category": "sso-saml-federation",
+    "front": "What is the purpose of STRUST?",
+    "back": "The Trust Manager transaction for maintaining a system's PSE - importing trusted CA certificates and managing the system's own SSL/SNC server certificate."
+  },
+  {
+    "id": "fc-079",
+    "category": "sso-saml-federation",
+    "front": "What is a PSE?",
+    "back": "Personal Security Environment - the container holding a system's private key and trusted certificate list, maintained via STRUST, used for SSL, SNC, and SAML signing."
+  },
+  {
+    "id": "fc-080",
+    "category": "sso-saml-federation",
+    "front": "X.509 client certificate auth vs. SAML SSO - what's the difference?",
+    "back": "X.509 cert auth happens at the TLS handshake using a certificate installed on the client, with no redirect; SAML SSO is an application-layer redirect protocol exchanging signed assertions."
+  },
+  {
+    "id": "fc-081",
+    "category": "oauth-principal-propagation",
+    "front": "What is Principal Propagation?",
+    "back": "A mechanism that forwards the authenticated cloud user's identity to an on-premise ABAP system via Cloud Connector so the backend performs its own authorization check as that specific user."
+  },
+  {
+    "id": "fc-082",
+    "category": "oauth-principal-propagation",
+    "front": "What is the SAML Bearer Assertion grant type?",
+    "back": "An OAuth flow where a SAML assertion representing an already-authenticated user is exchanged for an OAuth access token - the mechanism underlying principal propagation from BTP to on-premise."
+  },
+  {
+    "id": "fc-083",
+    "category": "oauth-principal-propagation",
+    "front": "What is the Cloud Connector's role in principal propagation?",
+    "back": "It validates the incoming certificate/assertion, checks the resource against its access control list, and forwards the request over the secure tunnel with the propagated identity intact."
+  },
+  {
+    "id": "fc-084",
+    "category": "oauth-principal-propagation",
+    "front": "What OAuth grant type is used for pure system-to-system calls with no user context?",
+    "back": "Client Credentials grant - the client authenticates as itself and receives a token scoped to its own permissions, with no end-user identity involved."
+  },
+  {
+    "id": "fc-085",
+    "category": "oauth-principal-propagation",
+    "front": "What is the Authorization Code grant used for?",
+    "back": "The standard interactive OAuth flow for browser-based user login, where the client redirects the user to authenticate, receives a code, and exchanges it for tokens."
+  },
+  {
+    "id": "fc-086",
+    "category": "oauth-principal-propagation",
+    "front": "What must the ABAP backend trust to accept principal propagation via Cloud Connector?",
+    "back": "Its STRUST/SSL PSE must trust the certificate the Cloud Connector presents, and SAML2 trust must be configured for the issuing IAS tenant if SAML Bearer assertions are used."
+  },
+  {
+    "id": "fc-087",
+    "category": "oauth-principal-propagation",
+    "front": "Principal propagation vs. a shared technical user pattern - what's the tradeoff?",
+    "back": "A shared technical user executes every backend call under one account, losing per-user audit trail; principal propagation preserves the real user's identity end-to-end for authorization and audit."
+  },
+  {
+    "id": "fc-088",
+    "category": "oauth-principal-propagation",
+    "front": "What is a JWT and what does it carry in a BTP context?",
+    "back": "A JSON Web Token - a signed, base64-encoded token carrying claims such as issuer, subject, scopes, and expiry that XSUAA issues after authentication, validated without a database round-trip."
+  },
+  {
+    "id": "fc-089",
+    "category": "hana-security",
+    "front": "What is an analytic privilege in HANA?",
+    "back": "A row-level access restriction on analytic/calculation views, filtering which data a user can see based on attribute values, distinct from object/system privileges which are all-or-nothing."
+  },
+  {
+    "id": "fc-090",
+    "category": "hana-security",
+    "front": "Repository role vs. catalog role in HANA?",
+    "back": "A repository (design-time, .hdbrole) role is version-controlled and transportable as a development artifact; a catalog (runtime) role is created directly in the database and isn't naturally transportable."
+  },
+  {
+    "id": "fc-091",
+    "category": "hana-security",
+    "front": "What is a system privilege in HANA?",
+    "back": "A broad administrative permission (e.g., BACKUP ADMIN, USER ADMIN) granting a capability across the entire database instance rather than on a specific object."
+  },
+  {
+    "id": "fc-092",
+    "category": "hana-security",
+    "front": "What is an object privilege in HANA?",
+    "back": "A permission such as SELECT, INSERT, or EXECUTE granted on a specific database object like a table, view, or procedure."
+  },
+  {
+    "id": "fc-093",
+    "category": "hana-security",
+    "front": "What is HANA data masking?",
+    "back": "A column-level control that obscures sensitive values (e.g., showing only the last 4 digits) for users without an unmasking privilege, while the query still executes against the real data."
+  },
+  {
+    "id": "fc-094",
+    "category": "hana-security",
+    "front": "What does a HANA audit policy define?",
+    "back": "A configurable rule set specifying which actions - e.g., privilege changes, SELECTs on sensitive tables - get logged to the audit trail, with targets including the database, syslog, or CSV file."
+  },
+  {
+    "id": "fc-095",
+    "category": "hana-security",
+    "front": "What's a common privilege-escalation risk pattern specific to HANA?",
+    "back": "Granting broad catalog SELECT/EXECUTE privileges to application technical users, which lets someone bypass the application's own authorization layer by querying tables directly."
+  },
+  {
+    "id": "fc-096",
+    "category": "hana-security",
+    "front": "Masking vs. anonymization in HANA - what's the difference?",
+    "back": "Masking simply hides the display of existing accurate values while the query still runs against real data; anonymization irreversibly generalizes or perturbs data so records can't be re-identified."
+  },
+  {
+    "id": "fc-097",
+    "category": "network-transport-security",
+    "front": "What does a Gateway ACL (secinfo/reginfo) control?",
+    "back": "Which programs can register as RFC servers (reginfo) or be started by the gateway (secinfo) - critical hardening against unauthorized external program registration."
+  },
+  {
+    "id": "fc-098",
+    "category": "network-transport-security",
+    "front": "What is SM59 used for?",
+    "back": "Maintaining RFC destinations - connection definitions such as type 3 ABAP or type G HTTP - including target host, logon credentials/trust, and security settings for outbound calls."
+  },
+  {
+    "id": "fc-099",
+    "category": "network-transport-security",
+    "front": "What is SAProuter?",
+    "back": "A proxy-like process controlling and logging network connections between separate network zones, based on route permission entries in saprouttab."
+  },
+  {
+    "id": "fc-100",
+    "category": "network-transport-security",
+    "front": "What is the Web Dispatcher's security role?",
+    "back": "It acts as a reverse proxy/load balancer for HTTP(S) traffic, terminating SSL and filtering URLs while shielding backend application servers from direct external exposure."
+  },
+  {
+    "id": "fc-101",
+    "category": "network-transport-security",
+    "front": "What is a trusted RFC connection?",
+    "back": "An RFC destination configured with a trust relationship allowing calls between systems without re-entering a password, governed on the receiving side by S_RFCACL."
+  },
+  {
+    "id": "fc-102",
+    "category": "network-transport-security",
+    "front": "What does authorization object S_RFCACL control?",
+    "back": "Authorization for trusted-system RFC calls, checked on the called system to determine whether the incoming trusted connection's user may execute without re-authentication."
+  },
+  {
+    "id": "fc-103",
+    "category": "network-transport-security",
+    "front": "What is transaction SMGW used for?",
+    "back": "The Gateway monitor - viewing active connections, registered programs, and maintaining the gateway's secinfo/reginfo access control lists at runtime."
+  },
+  {
+    "id": "fc-104",
+    "category": "network-transport-security",
+    "front": "What's the risk of an open/unrestricted gateway?",
+    "back": "Any external program can register as an RFC server or trigger execution via the gateway, historically exploited for remote code execution - a top SAP hardening finding."
+  },
+  {
+    "id": "fc-105",
+    "category": "grc-sod-audit",
+    "front": "What is Segregation of Duties (SoD)?",
+    "back": "A control principle ensuring no single user can perform two conflicting steps of a business process alone (e.g., create vendor and post payment), reducing fraud risk."
+  },
+  {
+    "id": "fc-106",
+    "category": "grc-sod-audit",
+    "front": "What is a mitigating control in GRC Access Control?",
+    "back": "A documented compensating control (e.g., a monthly review report) assigned to a user or role with an accepted SoD risk that can't or won't be remediated by removing access."
+  },
+  {
+    "id": "fc-107",
+    "category": "grc-sod-audit",
+    "front": "What is Firefighter (Emergency Access Management)?",
+    "back": "A controlled elevated-access mechanism where a user temporarily assumes a firefighter ID with broad access for emergency work, with every action logged and reviewed after the session ends."
+  },
+  {
+    "id": "fc-108",
+    "category": "grc-sod-audit",
+    "front": "What is risk analysis in GRC Access Control?",
+    "back": "The engine that evaluates a user's or role's combined authorizations against a rule set of conflicting function pairs to identify SoD violations before or after access is granted."
+  },
+  {
+    "id": "fc-109",
+    "category": "grc-sod-audit",
+    "front": "What is a rule set in GRC AC?",
+    "back": "The library of risk definitions - business processes, functions, and conflicting function pairs - against which risk analysis is executed; SAP ships a Global Rule Set as a baseline."
+  },
+  {
+    "id": "fc-110",
+    "category": "grc-sod-audit",
+    "front": "Simulation vs. real-time risk analysis in GRC - what's the difference?",
+    "back": "Simulation checks a proposed access change before it's granted (preventive); real-time/ongoing analysis checks existing assigned access on a schedule (detective)."
+  },
+  {
+    "id": "fc-111",
+    "category": "grc-sod-audit",
+    "front": "What is Access Request Management (ARM) in GRC AC?",
+    "back": "The workflow module handling access request submission, risk analysis at request time, approval routing, and automated provisioning into the target system."
+  },
+  {
+    "id": "fc-112",
+    "category": "grc-sod-audit",
+    "front": "What evidence proves a User Access Review control is actually effective?",
+    "back": "Periodic manager/role-owner sign-off reports showing reviewed access and any revocations actioned, with a closed-loop trail proving the review resulted in real system changes where needed."
+  },
+  {
+    "id": "fc-113",
+    "category": "production-support-migration",
+    "front": "What's the first step in a structured production authorization incident RCA?",
+    "back": "Reproduce and pinpoint the exact failing authorization object/values via SU53/STAUTHTRACE before touching any role, to avoid guessing fixes that mask the real root cause."
+  },
+  {
+    "id": "fc-114",
+    "category": "production-support-migration",
+    "front": "What's a key security risk during an S/4HANA system conversion?",
+    "back": "Custom code using deprecated or renamed authorization objects/tables can silently stop enforcing checks correctly post-conversion, since ABAP code compiles even against objects that behave differently."
+  },
+  {
+    "id": "fc-115",
+    "category": "production-support-migration",
+    "front": "How should authorization testing be sequenced in an upgrade project?",
+    "back": "Run SU25 comparison early in the technical upgrade phase, then execute full regression authorization testing in QA before transporting any role changes to production."
+  },
+  {
+    "id": "fc-116",
+    "category": "production-support-migration",
+    "front": "What's a common cause of 'works in QA, fails in production' authorization issues?",
+    "back": "Org-level or master data differences between environments, or a transport of role changes that wasn't fully released/imported, causing environment-specific authorization gaps."
+  },
+  {
+    "id": "fc-117",
+    "category": "production-support-migration",
+    "front": "What's the risk of using SAP_ALL as a war-room quick fix?",
+    "back": "It masks the actual root cause and creates an unaudited emergency access event that becomes a lingering SoD/audit finding if not promptly reverted - Firefighter IDs exist to avoid this shortcut."
+  },
+  {
+    "id": "fc-118",
+    "category": "production-support-migration",
+    "front": "What should be captured before closing a production authorization incident?",
+    "back": "Root cause, the specific fix applied, a preventive measure to avoid recurrence, and whether the incident reveals a gap in the transport/testing process."
+  },
+  {
+    "id": "fc-119",
+    "category": "production-support-migration",
+    "front": "What security concern arises during a system copy/refresh?",
+    "back": "Client-specific security data - STRUST PSEs, RFC destination passwords, background job users - doesn't copy cleanly and often needs manual post-copy reconfiguration."
+  },
+  {
+    "id": "fc-120",
+    "category": "production-support-migration",
+    "front": "How do you approach a slow-logon performance complaint tied to authorizations?",
+    "back": "Check the size of the user's authorization buffer and number of assigned (especially derived) roles, since an oversized buffer can measurably inflate logon time."
+  }
+]

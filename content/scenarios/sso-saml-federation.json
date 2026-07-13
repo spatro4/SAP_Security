@@ -1,0 +1,88 @@
+[
+  {
+    "id": "sso-s1",
+    "category": "sso-saml-federation",
+    "title": "SAML2 SSO to an ABAP system fails intermittently with certificate chain validation errors",
+    "difficulty": "Hard",
+    "situation": "SAML2 SSO into a production ABAP system began failing intermittently, with roughly half of login attempts across the same user population succeeding and half failing with a certificate chain validation error, starting a few days ago with no recent configuration changes made by the Basis or security team.",
+    "troubleshootingSteps": [
+      "Capture failed and successful SAML assertions side by side using a browser trace tool to compare exactly what differs between them.",
+      "Identify the signing certificate thumbprint used on each assertion and confirm whether more than one distinct certificate is currently being used to sign assertions from the IdP.",
+      "Check the corporate IdP's certificate rotation schedule/logs to determine if a signing certificate rotation with an overlap period is currently in progress.",
+      "Compare the certificates present in the ABAP system's STRUST SAML2 PSE against both the old and new IdP signing certificates.",
+      "Import the missing certificate into STRUST so both the old and new signing certificates are trusted throughout the rotation overlap window.",
+      "Confirm with the IdP team when the rotation overlap period ends, and remove the old certificate from trust only after confirming it's no longer in use."
+    ],
+    "toolsUsed": ["SAML-tracer browser extension", "STRUST", "SAML2 transaction", "IdP certificate rotation logs"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The corporate IdP was in the middle of a signing certificate rotation with an overlap period where both an old and new certificate could sign assertions, but the ABAP system's STRUST SAML2 PSE had only the new certificate imported, causing roughly half of assertions - those still signed with the old certificate - to fail chain validation.",
+    "resolution": "Imported the old signing certificate alongside the new one into the SAML2 PSE in STRUST, restoring successful validation for all assertions during the remainder of the rotation overlap window, and coordinated with the IdP team on the exact cutover date to safely remove the old certificate afterward.",
+    "preventiveMeasures": ["Require the identity/IdP team to notify downstream service providers before beginning any signing certificate rotation, including the overlap window duration", "Maintain both old and new certificates in trust proactively during any known rotation window rather than reactively after failures appear", "Build automated certificate expiry/rotation tracking across the full trust chain, not just at incident time"],
+    "diagram": "sequenceDiagram\n  participant IdP as Corporate IdP\n  participant ABAP as ABAP System (STRUST)\n  Note over IdP: Certificate rotation overlap begins\n  IdP->>ABAP: Assertion signed with OLD cert\n  ABAP-->>IdP: Validated (old cert trusted)\n  IdP->>ABAP: Assertion signed with NEW cert\n  ABAP-->>IdP: Rejected (new cert not yet imported)\n  Note over ABAP: Import new cert into SAML2 PSE\n  IdP->>ABAP: Assertion signed with either cert\n  ABAP-->>IdP: Validated"
+  },
+  {
+    "id": "sso-s2",
+    "category": "sso-saml-federation",
+    "title": "Kerberos SSO for SAP GUI fails for users after a laptop refresh migration",
+    "difficulty": "Medium",
+    "situation": "After a company-wide laptop hardware refresh rolled out over several weeks, users whose devices were migrated report Kerberos-based SSO failures logging into SAP GUI, prompting for a manual username/password instead of transparently authenticating, while users still on old devices work fine.",
+    "troubleshootingSteps": [
+      "Confirm the affected users' new devices are correctly domain-joined and can obtain a valid Kerberos Ticket Granting Ticket via a standard AD logon check.",
+      "Check whether the new device imaging process correctly preserved SNC client configuration and any required registry/GPO settings for Kerberos SSO.",
+      "Verify DNS resolution consistency for the SAP application server's hostname from the new devices matches what the registered SPN expects.",
+      "Check Active Directory for duplicate or conflicting Service Principal Name registrations that could have been introduced during the refresh (e.g., a new device object accidentally registered with the same SPN).",
+      "Correct the imaging/GPO template to include the required SNC client configuration for future rollouts, and manually remediate already-migrated affected devices.",
+      "Validate SSO end-to-end for a sample of remediated devices before considering the fix complete."
+    ],
+    "toolsUsed": ["Active Directory Users and Computers", "setspn", "SAP GUI SNC configuration", "Group Policy Management Console"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The new laptop imaging template used for the hardware refresh omitted the SNC client configuration and Kerberos-related registry settings that the previous device image included, so newly migrated devices could domain-join and authenticate to AD normally but had no functioning SNC/Kerberos SSO path configured for SAP GUI.",
+    "resolution": "Updated the imaging template to include the correct SNC client configuration and GPO settings, and manually remediated already-migrated devices to restore Kerberos SSO functionality.",
+    "preventiveMeasures": ["Include SNC/Kerberos SSO validation as an explicit test case in any future device imaging or hardware refresh rollout plan", "Maintain SNC client configuration requirements in the IT asset/imaging documentation shared with the endpoint management team", "Pilot imaging template changes against a small group with SSO validation before full-scale rollout"]
+  },
+  {
+    "id": "sso-s3",
+    "category": "sso-saml-federation",
+    "title": "SAML2 SSO works internally but fails for external VPN users on the identical trust configuration",
+    "difficulty": "Architect",
+    "situation": "SAML2-based SSO to a Fiori-enabled ABAP system works reliably for users on the corporate office network but consistently fails for the same users connecting via VPN from external networks, using what the Basis team confirms is an identical SAML2 trust configuration for both cases.",
+    "troubleshootingSteps": [
+      "Compare the exact hostname/URL external VPN users resolve for the ABAP system against what internal users resolve, checking for split-DNS differences.",
+      "Capture the failed external SAML flow with a browser trace tool to see exactly where in the redirect/POST sequence it breaks.",
+      "Check whether the ACS URL registered in the SAML2 trust configuration matches the externally-resolved hostname, or only the internal one.",
+      "Investigate whether a reverse proxy, load balancer, or WAF in the external network path terminates TLS or rewrites request headers in a way that breaks the SAML POST binding.",
+      "Correct either the DNS/hostname configuration or the ACS URL registration (and any proxy rewrite rules) so the external path resolves and completes the SAML flow identically to the internal path.",
+      "Re-test from an external network with a representative sample of users before closing the incident."
+    ],
+    "toolsUsed": ["SAML-tracer browser extension", "DNS resolution tools (nslookup/dig)", "Reverse proxy/WAF configuration console", "SAML2 transaction"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "A split-DNS configuration meant external VPN users resolved a different public-facing hostname for the ABAP system than internal users, and that external hostname did not match the ACS URL registered in the SAML2 trust configuration, causing the SAML assertion's expected callback location to mismatch what external requests actually reached.",
+    "resolution": "Updated the SAML2 trust configuration to correctly recognize the externally-resolved hostname's ACS URL (or aligned DNS so both paths resolved consistently), restoring successful SSO for external VPN users.",
+    "preventiveMeasures": ["Document and test both internal and external network paths explicitly whenever configuring or changing SAML2 trust for any system reachable both ways", "Maintain consistent DNS naming (avoid unnecessary split-DNS divergence) for SSO-relevant hostnames where feasible", "Include an external-network SSO test as a standard step in any SAML2 configuration change validation"],
+    "diagram": "flowchart TD\n  A[User Browser] --> B{Network Path}\n  B -->|Internal| C[Internal Hostname]\n  B -->|External VPN| D[Public Hostname via Split-DNS]\n  C --> E[Matches ACS URL in SAML2 Trust Config]\n  D --> F[Does Not Match ACS URL]\n  E --> G[SSO Succeeds]\n  F --> H[SSO Fails - Assertion Rejected]"
+  },
+  {
+    "id": "sso-s4",
+    "category": "sso-saml-federation",
+    "title": "SICF service inheritance accidentally exposes an administrative interface to SAML2 SSO",
+    "difficulty": "Hard",
+    "situation": "A routine security review discovers that an internal administrative SICF service, never intended for end-user browser access, is reachable and authenticatable via SAML2 SSO, traced back to an SSO configuration change made at a parent SICF node months earlier for an unrelated Fiori rollout.",
+    "troubleshootingSteps": [
+      "Identify the exact SICF node where SAML2 SSO was enabled and map its full inheritance tree to see every child service affected.",
+      "Confirm which of the affected child services were intentionally meant to support SAML2 SSO versus those exposed unintentionally through inheritance.",
+      "Assess whether the administrative service was ever actually accessed via the unintended SSO path by reviewing access logs for that service over the exposure window.",
+      "Explicitly override the SSO configuration at the administrative service's own SICF node to disable SAML2 SSO for it specifically, rather than relying on default inheritance.",
+      "Conduct a full landscape review of every SICF node with SAML2 SSO enabled to identify any other unintentionally exposed services via the same inheritance pattern.",
+      "Establish a review gate requiring explicit justification before enabling SSO at any parent-level SICF node going forward."
+    ],
+    "toolsUsed": ["SICF", "SAML2 transaction", "ICF service access logs"],
+    "tablesChecked": [],
+    "authObjects": ["S_ICF"],
+    "rootCause": "SAML2 SSO was enabled at a parent SICF node during a Fiori rollout without accounting for inheritance to unrelated child services, silently extending SSO-based reachability to an internal administrative service that was never intended to be accessible via browser-based federated login.",
+    "resolution": "Explicitly disabled SAML2 SSO inheritance for the administrative service at its own SICF node, confirmed via access logs that no unauthorized access had occurred during the exposure window, and conducted a landscape-wide review that found no additional unintended exposures.",
+    "preventiveMeasures": ["Require explicit per-service review before enabling SSO configuration at any SICF node with descendant services", "Periodically audit which SICF services are both active and SSO-enabled, cross-referenced against their intended access pattern", "Avoid enabling SSO configuration broadly at high-level parent nodes; prefer explicit configuration at the specific service level"]
+  }
+]

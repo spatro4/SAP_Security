@@ -1,0 +1,109 @@
+[
+  {
+    "id": "oauth-s1",
+    "category": "oauth-principal-propagation",
+    "title": "Principal Propagation Works for Pilot Users but Fails at Wider Rollout",
+    "difficulty": "Hard",
+    "situation": "A BTP-based claims application worked flawlessly through UAT and a pilot with 8 users, but immediately after wider rollout to 300 users, most new users receive an identity-resolution error instead of successfully reaching the on-premise backend.",
+    "troubleshootingSteps": [
+      "Confirm the exact error is an identity-resolution failure, not a Cloud Connector ACL rejection or an AUTHORITY-CHECK failure, by checking Cloud Connector's access control log first.",
+      "Check the backend's principal propagation identity trust configuration to confirm IAS is still correctly trusted as the assertion issuer.",
+      "Inspect the backend user mapping configuration and confirm whether it is a manual 1:1 mapping table or attribute-based federation.",
+      "Compare the list of failing users against the mapping table entries - confirm whether failing users simply have no manual mapping entry at all.",
+      "Validate that a shared, consistently populated attribute (e.g., corporate email) exists across both identity systems as a federation candidate.",
+      "Design and test a migration from the manual mapping table to attribute-based federation in a non-production system before rolling out to production."
+    ],
+    "toolsUsed": ["Cloud Connector administration UI", "Backend trust configuration (STRUST)", "Backend user mapping/identity federation configuration"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The backend user mapping was implemented as a manually maintained 1:1 mapping table populated only for the original pilot users; the wider rollout population was never added, so principal propagation had no local user to resolve to for the vast majority of new users.",
+    "resolution": "Migrated the backend user mapping from the manual table to attribute-based identity federation keyed on a shared corporate email attribute already present and consistently populated in both the cloud identity provider and the backend user master, eliminating the need for any per-user manual mapping entry going forward.",
+    "preventiveMeasures": ["Never approve a manual 1:1 user mapping design for any rollout beyond a small, explicitly time-boxed pilot", "Validate the chosen federation attribute's data quality and uniqueness across both identity systems before pilot, not after rollout failure", "Document user mapping strategy explicitly in the integration's architecture sign-off, not left as an implementation detail"],
+    "diagram": "flowchart TD\n  A[Pilot: 8 Users] --> B[Manual 1:1 Mapping Table]\n  B --> C[Works for Pilot]\n  D[Rollout: 300 Users] --> E{Mapping Entry Exists?}\n  E -->|No| F[Identity Resolution Error]\n  E -->|Yes| G[Success]\n  F --> H[Migrate to Attribute-Based Federation]\n  H --> I[Resolves for All Users Automatically]"
+  },
+  {
+    "id": "oauth-s2",
+    "category": "oauth-principal-propagation",
+    "title": "Troubleshooting a Cloud Connector Resource-Level Access Control Rejection",
+    "difficulty": "Medium",
+    "situation": "A newly deployed BTP application can successfully reach some on-premise OData services through Cloud Connector but a specific new endpoint added last week consistently fails with a connection-refused style error before any backend log entry appears.",
+    "troubleshootingSteps": [
+      "Confirm the error occurs before the backend generates any application-layer log entry, indicating the call never actually reached the backend.",
+      "Check the Cloud Connector administration UI's access control log for the specific request path.",
+      "Compare the exact URL path being called against the currently configured resource-level allowlist entries for that backend system.",
+      "Confirm whether the new endpoint was ever added to the resource-level ACL when it was deployed, or only the system-level access was previously granted.",
+      "Add the specific new resource path to the resource-level allowlist rather than broadening system-level access.",
+      "Retest the call and confirm it now reaches the backend successfully."
+    ],
+    "toolsUsed": ["Cloud Connector administration UI", "Access control log"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The new OData endpoint was never added to Cloud Connector's resource-level access control list when it was deployed; system-level access to the backend host existed, but the specific new resource path was not allowlisted.",
+    "resolution": "Added the specific new resource path to the resource-level ACL, scoped narrowly to only that path rather than widening system-level access, restoring functionality without expanding overall exposure.",
+    "preventiveMeasures": ["Include a resource-level Cloud Connector ACL update as a mandatory step in the deployment checklist for any new backend-exposed endpoint", "Periodically audit Cloud Connector configurations for system-level allowlists that should be narrowed to resource-level", "Alert developers early that connection-refused-style errors before any backend log entry point to Cloud Connector, not backend authorization"]
+  },
+  {
+    "id": "oauth-s3",
+    "category": "oauth-principal-propagation",
+    "title": "Distinguishing a Backend AUTHORITY-CHECK Failure After Successful Propagation",
+    "difficulty": "Medium",
+    "situation": "A cloud application's call reaches the backend successfully - Cloud Connector shows the request forwarded and the backend resolves a valid local user - but the call still fails with an authorization-style error for one specific business function.",
+    "troubleshootingSteps": [
+      "Confirm via Cloud Connector logs and backend trust logs that both the network hop and identity resolution succeeded, ruling out the first two failure domains.",
+      "Identify the specific local user the propagated identity resolved to.",
+      "Run STAUTHTRACE (or review SU53 immediately after a reproduction) scoped to that resolved local user during the failing call.",
+      "Identify the specific authorization object and field values causing the AUTHORITY-CHECK failure.",
+      "Cross-reference the user's assigned roles against the required authorization to confirm the actual gap.",
+      "Correct the role assignment or authorization values for that specific object rather than broadening unrelated authorizations."
+    ],
+    "toolsUsed": ["STAUTHTRACE", "SU53", "PFCG"],
+    "tablesChecked": ["AGR_1251", "AGR_USERS"],
+    "authObjects": [],
+    "rootCause": "The propagated user correctly resolved to a valid local backend account, but that account's assigned roles were missing a specific authorization object required for the business function being called - a genuine, ordinary ABAP authorization gap unrelated to the propagation mechanism itself.",
+    "resolution": "Added the missing authorization values to the appropriate role after confirming the exact object and field values via trace, and validated the fix with the same reproduction steps.",
+    "preventiveMeasures": ["Always rule out Cloud Connector and identity trust failures first before assuming an authorization gap, to avoid wasted diagnostic effort", "Include representative principal-propagated test users with realistic role assignments in integration test cycles, not just administrative test accounts", "Document the three-layer failure domain model in the support runbook so Tier 1 support can triage correctly on first contact"]
+  },
+  {
+    "id": "oauth-s4",
+    "category": "oauth-principal-propagation",
+    "title": "SAML Assertion Trust Failure After Identity Provider Certificate Rotation",
+    "difficulty": "Hard",
+    "situation": "A principal-propagated integration that had worked reliably for over a year suddenly begins failing every call with an assertion-validation error immediately following a scheduled Identity Authentication Service certificate rotation.",
+    "troubleshootingSteps": [
+      "Confirm the failure occurs at assertion validation on the backend rather than at Cloud Connector or AUTHORITY-CHECK, by checking backend OAuth/SAML validation logs.",
+      "Correlate the failure's start time precisely against the recent IAS certificate rotation change record.",
+      "Check the backend's trust configuration to confirm which IAS signing certificate it currently trusts.",
+      "Confirm whether the backend trust store still references the old, now-rotated certificate rather than the newly issued one.",
+      "Import the new IAS signing certificate/metadata into the backend trust configuration.",
+      "Retest the SAML Bearer Assertion flow end-to-end and confirm assertions now validate successfully."
+    ],
+    "toolsUsed": ["STRUST", "Backend OAuth server trust/validation logs", "IAS administration console"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The Identity Authentication Service's signing certificate was rotated as part of routine certificate lifecycle management, but the on-premise backend's trust configuration was never updated to trust the new certificate, causing every subsequently issued SAML assertion to fail signature validation.",
+    "resolution": "Updated the backend's trust configuration to import the new IAS signing certificate, restoring successful assertion validation for all principal-propagated calls.",
+    "preventiveMeasures": ["Add every backend system's trust configuration to the standard change checklist for any IAS certificate rotation", "Monitor certificate expiry dates proactively across all trust relationships rather than discovering rotation impact reactively", "Test certificate rotation changes in a non-production environment mirroring the production trust chain before the production rotation window"]
+  },
+  {
+    "id": "oauth-s5",
+    "category": "oauth-principal-propagation",
+    "title": "Cloud Connector System-Level Over-Exposure Discovered During Security Assessment",
+    "difficulty": "Architect",
+    "situation": "A security assessment of an existing hybrid landscape finds that Cloud Connector is configured with an entire production ECC system allowlisted at the system level, with no resource-level restrictions limiting which specific services are reachable.",
+    "troubleshootingSteps": [
+      "Inventory every BTP application actually using this Cloud Connector configuration and the specific resource paths each one legitimately requires.",
+      "Compare the actual required resource paths against the current unrestricted system-level exposure to quantify the gap.",
+      "Draft a resource-level allowlist covering only the confirmed legitimate paths for each consuming application.",
+      "Test the narrowed resource-level ACL in a non-production Cloud Connector instance against each known consuming application.",
+      "Roll out the resource-level restriction in production during a low-risk window, monitoring for any unexpected rejection of legitimate traffic.",
+      "Formally remove the broad system-level-only exposure once resource-level restrictions are confirmed functioning correctly for all known consumers."
+    ],
+    "toolsUsed": ["Cloud Connector administration UI", "Access control log", "Application integration inventory"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "Cloud Connector was originally configured with broad system-level access as a fast path to get the first integration working, and resource-level restriction was never subsequently tightened as additional applications were onboarded, leaving the entire backend system's services reachable to any BTP application in the subaccount.",
+    "resolution": "Implemented resource-level access control restricting reachability to only the specific, inventoried paths required by legitimate consuming applications, materially reducing the attack surface exposed through the Cloud Connector tunnel.",
+    "preventiveMeasures": ["Require resource-level ACL scoping as a mandatory approval gate for any new Cloud Connector system exposure, never system-level-only by default", "Periodically re-audit Cloud Connector configurations as part of standard security review cycles, not only during ad hoc assessments", "Maintain a living inventory mapping each allowlisted resource path to its specific consuming application and business justification"],
+    "diagram": "flowchart TD\n  A[Before: System-Level Only] --> B[Entire ECC System Exposed]\n  C[After: Resource-Level Scoped] --> D[Only Required OData/RFC Paths Exposed]\n  B -.->|Remediation| C"
+  }
+]

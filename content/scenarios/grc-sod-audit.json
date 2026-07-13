@@ -1,0 +1,129 @@
+[
+  {
+    "id": "grc-s1",
+    "category": "grc-sod-audit",
+    "title": "Firefighter Access Used 400+ Times with No Log Review Evidence",
+    "difficulty": "Hard",
+    "situation": "During pre-audit preparation, the GRC team discovers that a set of Firefighter IDs used for month-end financial close support have been checked out over 400 times in the past twelve months, but the consolidated log review report shows fewer than a dozen reviews on record, and none in the last four months.",
+    "troubleshootingSteps": [
+      "Pull the Firefighter usage log summary report scoped to all Firefighter IDs and controllers for the trailing 12 months.",
+      "Cross-reference checkout events against the log review/approval workflow history to identify exactly which sessions were reviewed versus left open.",
+      "Interview the assigned controllers to understand whether the review step is technically broken (workflow not routing) or a process/staffing gap (reviews simply not being done).",
+      "Sample a subset of the unreviewed sessions and manually review the actual transactions executed to assess whether any activity itself looks anomalous, independent of the process gap.",
+      "Check whether the controller role assignment itself is current - a common root cause is a controller who left the company or changed roles without reassignment."
+    ],
+    "toolsUsed": ["NWBC Firefighter Log Summary Report", "GRC workflow monitor"],
+    "tablesChecked": ["GRACSUPUSR"],
+    "authObjects": [],
+    "rootCause": "The controller originally assigned to review these Firefighter IDs' logs had left the company eight months earlier; the review workflow continued routing notifications to their now-inactive account with no fallback controller configured, so log reviews silently stopped occurring while checkouts continued uninterrupted.",
+    "resolution": "Assigned an active, independent controller immediately and performed a full retroactive review of all unreviewed sessions in the backlog, documenting findings and closing each one; no malicious activity was found in the retroactive sample, but the gap itself was formally logged as a control deficiency for the audit period.",
+    "preventiveMeasures": [
+      "Require at least two active controllers per Firefighter ID with automated escalation if the primary doesn't act within the review SLA.",
+      "Add controller role assignments to the standard leaver/transfer checklist so departures automatically trigger reassignment.",
+      "Build a standing dashboard alerting when any Firefighter log remains unreviewed past the SLA window, rather than discovering gaps only during audit prep."
+    ],
+    "relatedQuestionIds": ["grc-q5"],
+    "diagram": "flowchart TD\n  A[Firefighter Checkout] --> B[Session Logged]\n  B --> C{Controller Reviews within SLA?}\n  C -->|Yes| D[Reviewed and Closed]\n  C -->|No - Controller Inactive| E[Review Never Occurs]\n  E --> F[Backlog Grows Silently]\n  F --> G[Discovered During Audit Prep]"
+  },
+  {
+    "id": "grc-s2",
+    "category": "grc-sod-audit",
+    "title": "Clean Quarterly Risk Reports Masking a Six-Month Connector Sync Failure",
+    "difficulty": "Architect",
+    "situation": "An external SOX auditor's independent SoD test finds several material violations in the production S/4HANA system. The client's own GRC Access Control risk analysis reports for the same period show zero violations for that risk, triggering an audit escalation.",
+    "troubleshootingSteps": [
+      "Compare the GRC repository's last-synced role and user data timestamps against the actual current state of the target system.",
+      "Check the connector's RFC destination and background job logs for the sync program covering the relevant window.",
+      "Determine the exact date the sync last succeeded and cross-reference against role/user changes made in the target system after that date.",
+      "Identify every risk analysis report generated between the failure date and discovery, and flag all of them as based on stale data rather than trusting any of their conclusions.",
+      "Manually re-run risk analysis against a fresh, confirmed-current data pull to establish the true current violation population."
+    ],
+    "toolsUsed": ["SM59", "Connector sync job monitor", "NWBC risk analysis"],
+    "tablesChecked": ["GRACCONN"],
+    "authObjects": [],
+    "rootCause": "A network security team rotated firewall rules during an unrelated infrastructure project six months earlier, inadvertently blocking the connector's RFC traffic between the GRC system and the production S/4HANA system; the sync job failed silently with no alerting configured, and every subsequent risk analysis report reflected the frozen pre-failure data set, missing all role and access changes made since.",
+    "resolution": "Restored the RFC connectivity, validated a full successful sync, and re-ran risk analysis against current data, confirming the violations the external auditor found and several additional ones. The gap itself, and every report issued during the affected window, was disclosed to the audit committee as a control deficiency with a documented remediation and monitoring plan.",
+    "preventiveMeasures": [
+      "Implement automated alerting on connector sync job failure or record-count anomalies, escalating within hours rather than being discovered at the next audit cycle.",
+      "Require any network/firewall change management process to explicitly check for GRC connector dependencies before implementation.",
+      "Add a connector sync health attestation as a mandatory field on every risk analysis report distributed to stakeholders, showing the data's actual as-of timestamp."
+    ],
+    "relatedQuestionIds": ["grc-q6"],
+    "diagram": "flowchart TD\n  A[Firewall Rule Change - Unrelated Project] --> B[Connector RFC Traffic Blocked]\n  B --> C[Sync Job Fails Silently]\n  C --> D[GRC Repository Frozen at Pre-Failure State]\n  D --> E[Risk Analysis Reports Show Clean Results]\n  F[External Auditor Tests Live System] --> G[Finds Real Violations GRC Never Showed]\n  G --> H[Six Months of Reports Disclosed as Deficient]"
+  },
+  {
+    "id": "grc-s3",
+    "category": "grc-sod-audit",
+    "title": "Mitigating Control Re-Certification Lapsed for Three Years Undetected",
+    "difficulty": "Medium",
+    "situation": "An internal audit sample of 25 mitigating controls finds that one, covering a high-risk violation held by the accounts payable supervisor, was assigned three years ago and has no re-certification evidence in the workflow history since the initial assignment.",
+    "troubleshootingSteps": [
+      "Pull the mitigating control's full history including original assignment, configured re-certification frequency, and every workflow event since.",
+      "Confirm whether the underlying compensating control (an independent monthly reconciliation review) has actually been operating despite the missing formal re-certification.",
+      "Interview the control owner to determine whether re-certification was simply never performed or whether it was done informally outside the GRC workflow.",
+      "Assess whether the same gap exists for other mitigating controls owned by the same control owner or business unit.",
+      "Determine whether the compensating control's design is still appropriate given any organizational changes over the three-year period."
+    ],
+    "toolsUsed": ["NWBC mitigation control workflow report"],
+    "tablesChecked": ["GRACMITCTRL"],
+    "authObjects": [],
+    "rootCause": "The mitigating control was configured with an annual re-certification requirement, but no automated reminder or escalation was built into the workflow; the control owner assumed re-certification was a one-time setup activity rather than a recurring obligation, and no periodic GRC governance review caught the gap until this specific audit sample.",
+    "resolution": "Performed an immediate retroactive review confirming the compensating control had, in fact, been operating informally throughout the period, and formally re-certified it going forward with a documented quarterly cadence instead of annual. The finding was reported as a process control gap (not a substantive control failure) since the underlying reconciliation had continued, but the missing evidence trail itself was the deficiency.",
+    "preventiveMeasures": [
+      "Configure automated reminder and escalation workflows for every mitigating control's re-certification due date, not just at initial assignment.",
+      "Run a periodic governance sweep (independent of any specific audit) checking every active mitigating control's re-certification status.",
+      "Shorten re-certification frequency for high-risk violations from annual to quarterly to reduce the maximum possible gap before detection."
+    ],
+    "relatedQuestionIds": ["grc-q4"]
+  },
+  {
+    "id": "grc-s4",
+    "category": "grc-sod-audit",
+    "title": "Auditor Challenges a Role-Level 'False Positive' Dismissal",
+    "difficulty": "Hard",
+    "situation": "A role-level risk analysis flags a high-risk violation on a shared services role that both creates vendor master records and processes vendor payments. The security team dismissed it as a false positive because the role's payment authorization is scoped to a single low-value company code range, but the external auditor rejects the dismissal and demands proof.",
+    "troubleshootingSteps": [
+      "Re-run the same violation at permission level rather than action level, evaluating the actual authorization object field values assigned to the role.",
+      "Extract the specific authorization values for the payment-processing object, confirming the company code and value-limit fields genuinely restrict the conflicting action as claimed.",
+      "Cross-check whether any derived role variant of this master role has broader company code or value-limit values than the one originally analyzed.",
+      "Confirm the field-value restriction can't be bypassed through an alternate transaction or a BAdI/custom code path not covered by the standard authority check.",
+      "Document the permission-level evidence in a format the auditor can independently verify, rather than asserting the conclusion without underlying data."
+    ],
+    "toolsUsed": ["NWBC permission-level risk analysis", "SE16N"],
+    "tablesChecked": ["GRACACTION", "AGR_1251"],
+    "authObjects": [],
+    "rootCause": "The original dismissal was correct for the single-role instance analyzed, but was asserted without permission-level evidence and without checking derived variants; one derived variant of the role, created for a different regional shared-service center, had a materially wider company code range that did make the conflict genuinely exploitable for that population.",
+    "resolution": "Confirmed the master role's dismissal was valid with permission-level evidence, but identified and remediated the one derived variant with the wider scope, either narrowing its value limit or applying a documented mitigating control specific to that variant, then re-presented findings to the auditor with full field-value evidence for every variant rather than the master role alone.",
+    "preventiveMeasures": [
+      "Require permission-level evidence, not just action-level dismissal, for any false-positive determination presented to auditors.",
+      "Extend risk analysis and false-positive review to every derived role variant individually, not just the master role.",
+      "Document false-positive determinations in a standard evidence format auditors can independently reproduce."
+    ],
+    "relatedQuestionIds": ["grc-q2"]
+  },
+  {
+    "id": "grc-s5",
+    "category": "grc-sod-audit",
+    "title": "Read Access Logging Gap After a New Fiori HR App Rollout",
+    "difficulty": "Medium",
+    "situation": "An HR data privacy audit asks for a log of every access to a specific set of employee compensation fields over the past six months. The security team pulls Read Access Logging reports confirming logging for the classic GUI transaction but discovers a newly rolled-out Fiori compensation review app shows zero RAL entries for the same underlying fields, despite being in active use by managers for months.",
+    "troubleshootingSteps": [
+      "Confirm which RAL configuration (structure, field group, log channel) covers the classic transaction versus what the new Fiori app actually uses.",
+      "Check whether the Fiori app's OData service exposes the same backend fields through a different channel not included in the existing RAL channel configuration.",
+      "Review the Fiori app's rollout project documentation to determine whether RAL extension was ever raised as a requirement during implementation.",
+      "Test read access through the Fiori app in a non-production system while monitoring RAL configuration to confirm whether logging can be extended to this channel.",
+      "Quantify the exposure window - how many managers had access and for how long the gap existed."
+    ],
+    "toolsUsed": ["SRALMANAGER"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "Read Access Logging was originally configured years earlier covering only the classic GUI transaction's RFC/Dynpro channel; when the Fiori compensation review app was rolled out, it accessed the same backend fields through an OData service channel that was never added to the RAL configuration, because the rollout project treated RAL as an existing control that 'already covered' the data rather than re-verifying it per new access channel.",
+    "resolution": "Extended the RAL configuration to include the OData channel used by the Fiori app, validated logging was capturing reads correctly, and disclosed the historical gap window to the privacy/compliance team along with the list of managers who had access during that period, since no logged evidence existed for that specific window.",
+    "preventiveMeasures": [
+      "Add RAL channel coverage verification as a mandatory checklist item for any new Fiori app or OData service exposing previously RAL-covered sensitive fields.",
+      "Periodically audit RAL configuration against the full current inventory of access channels (GUI, Fiori, OData, RFC) for every sensitive field group, not just at initial setup.",
+      "Treat RAL configuration as a per-channel control that must be explicitly re-verified with every new UI or integration layer, not an automatically inherited one."
+    ],
+    "relatedQuestionIds": ["grc-q7"]
+  }
+]

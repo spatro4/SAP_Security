@@ -1,0 +1,87 @@
+[
+  {
+    "id": "btp-s1",
+    "category": "btp-security",
+    "title": "User assigned the correct role collection still gets 403 Forbidden on a custom Fiori app",
+    "difficulty": "Hard",
+    "situation": "A business user was assigned the correct role collection in the subaccount cockpit yesterday, and the assignment is confirmed active, but the user's browser session against a custom Fiori app on BTP still returns 403 Forbidden on every OData call.",
+    "troubleshootingSteps": [
+      "Confirm the role collection assignment via the cockpit's 'Users' view and cross-check with the Cloud Foundry/BTP CLI (`btp get security/role-collection`) to rule out a UI caching artifact.",
+      "Have the user fully log out and back in, or decode their current JWT (via jwt.io or a debug endpoint) to check the `iat`/`exp` and `scope` claims against what the role collection should now grant.",
+      "If the token predates the assignment, confirm this is expected token-lifetime behavior rather than a defect - the JWT was issued before the role collection change and is still within its validity window.",
+      "If the token is fresh and still missing the scope, check whether the role collection's role was created from a role template that matches the currently deployed xs-security.json version, since a stale role tied to an outdated template can silently omit a scope added in a later app version.",
+      "Check the application's authorization-check code for scope validation logic to confirm it is checking the fully qualified `$XSAPPNAME.scope` and not a bare scope name that could be mismatched after an app rename or xsappname change.",
+      "Re-test with a fresh token after confirming role/template alignment; if still failing, capture the XSUAA token exchange response directly to see the actual granted scopes as issued."
+    ],
+    "toolsUsed": ["BTP Cockpit", "btp CLI", "JWT decoder", "Browser DevTools"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The user's browser session held a JWT access token issued before the role collection assignment took effect, and OAuth access tokens are bearer tokens validated purely by signature and expiry - not re-checked live against current assignments.",
+    "resolution": "Forced a full re-authentication to obtain a fresh access token reflecting the current role collection assignment, and documented the token-lifetime propagation delay as expected behavior for the support team's runbook.",
+    "preventiveMeasures": ["Document expected token propagation delay in onboarding/access-change communications to end users", "For high-urgency access changes, consider a shorter access token validity window for sensitive applications", "Build a standard 'log out and back in' step into the access-grant confirmation process before escalating as a defect"]
+  },
+  {
+    "id": "btp-s2",
+    "category": "btp-security",
+    "title": "Subaccount audit reveals users still authenticating via default identity zone instead of corporate IdP",
+    "difficulty": "Architect",
+    "situation": "A compliance audit of a production subaccount discovers a subset of users are authenticating through the SAP default identity provider (self-registered accounts) rather than the corporate IAS-brokered IdP that was supposedly mandatory for all applications in that subaccount.",
+    "troubleshootingSteps": [
+      "Pull the subaccount's trust configuration list to confirm both the custom corporate trust and the default identity provider are simultaneously active and reachable.",
+      "Identify which specific applications/service instances are configured to allow the default IdP as an authentication origin, since trust configuration can be set per-application rather than subaccount-wide.",
+      "Cross-reference the self-registered account list from the default IdP against the corporate HR/identity source to determine whether these are legitimate but improperly onboarded users, or genuinely unauthorized self-registrations.",
+      "Check deployment history/CI-CD logs for when these applications were last redeployed, to determine whether they were built before the corporate trust configuration was mandated and never updated.",
+      "Disable the default identity provider as an allowed origin for the affected applications and force redeployment/binding update to point exclusively at the corporate trust configuration.",
+      "Notify and re-onboard any legitimate users found on the default IdP through the proper corporate identity process before final cutover."
+    ],
+    "toolsUsed": ["BTP Cockpit Trust Configuration", "btp CLI", "CI/CD pipeline logs"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "Several applications were deployed before the corporate IdP trust configuration was established as mandatory policy, and default identity provider access was never explicitly disabled for them afterward, leaving a self-registration gap.",
+    "resolution": "Disabled default identity provider access at the application/service-instance level for all affected apps, migrated legitimate users through governed onboarding, and added a mandatory trust-configuration check to the CI/CD deployment pipeline gate.",
+    "preventiveMeasures": ["Add automated pipeline validation that blocks deployment if an app's trust configuration allows the default identity provider", "Include default-IdP-disablement as a mandatory item in the subaccount governance baseline", "Run periodic automated audits comparing configured trust origins against the approved baseline"],
+    "diagram": "flowchart TD\n  A[Production Subaccount] --> B{Trust Configuration}\n  B --> C[Corporate IAS-Brokered IdP]\n  B --> D[Default SAP ID Service]\n  D --> E[Self-Registered Accounts]\n  E --> F[Audit Finding: Unauthorized Access Path]\n  C --> G[Governed Access via HR-Sourced Identity]"
+  },
+  {
+    "id": "btp-s3",
+    "category": "btp-security",
+    "title": "Attribute-restricted role collection fails to limit data visibility in a custom application",
+    "difficulty": "Medium",
+    "situation": "A finance application on BTP was configured with cost-center attribute restrictions on its role collections so that regional finance users only see their own cost center's data, but users report seeing all cost centers regardless of the attribute value assigned to their role.",
+    "troubleshootingSteps": [
+      "Decode the affected user's JWT to confirm the cost center attribute value is actually present in the token claims as expected.",
+      "Confirm the attribute was correctly filled in when the role was created from the role template, not left blank (a blank attribute value in XSUAA is typically treated as unrestricted/wildcard).",
+      "Review the application's server-side authorization logic to check whether it actually reads the attribute claim from the decoded token and applies a corresponding data filter, or only checks for scope presence.",
+      "If the application code has no attribute-based filtering logic at all, confirm with the development team whether this was ever implemented versus assumed to be enforced automatically by XSUAA.",
+      "Test with a role collection where the attribute is deliberately left blank versus filled, to conclusively demonstrate whether the application differentiates behavior at all."
+    ],
+    "toolsUsed": ["JWT decoder", "Application server logs", "BTP Cockpit Role Editor"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The application's business logic never implemented server-side filtering based on the attribute claim; the development team had assumed XSUAA enforced attribute-based restriction automatically the way ABAP org-level fields are enforced by the kernel, but XSUAA only carries the attribute value in the token without acting on it.",
+    "resolution": "Development team added explicit server-side filtering logic reading the cost-center attribute from the validated JWT and applying it to every data query, followed by a full regression test confirming restriction now works per role collection.",
+    "preventiveMeasures": ["Add attribute-enforcement verification as a mandatory security testing step before go-live for any app using attribute-restricted roles", "Document clearly in developer onboarding that XSUAA attributes are carrier-only, not self-enforcing", "Include a specific test case per attribute value combination in the app's automated test suite"]
+  },
+  {
+    "id": "btp-s4",
+    "category": "btp-security",
+    "title": "Cross-subaccount role collection drift discovered during merger due diligence",
+    "difficulty": "Principal Architect",
+    "situation": "During technical due diligence ahead of a divestiture, security architects need to certify that each of 12 subaccounts being carved out to the buyer has a clean, well-understood authorization model, but discover the subaccounts have drifted significantly from their original shared template with no change history preserved.",
+    "troubleshootingSteps": [
+      "Export current role collections, roles, attributes, and trust configuration from all 12 subaccounts using the Authorization Management and Cloud Management REST APIs.",
+      "Attempt to reconstruct the original baseline template from the earliest available configuration backup, CI/CD deployment artifacts, or documentation, since no formal drift tracking existed.",
+      "Diff each subaccount's current state against the reconstructed baseline and pairwise against each other to classify differences into legitimate business customization versus unexplained/undocumented drift.",
+      "For unexplained drift, interview subaccount administrators and review any available change tickets or cockpit audit logs to attribute the change to a specific business need or identify it as accidental.",
+      "Document a certified as-is authorization model per subaccount for the divestiture data room, explicitly flagging any drift that could not be attributed, as a disclosed risk item.",
+      "Recommend remediation or acceptance of residual undocumented drift as a condition of the carve-out, in coordination with legal/deal teams."
+    ],
+    "toolsUsed": ["Authorization Management API", "Cloud Management API", "btp CLI", "Cockpit audit log"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "No formal configuration baseline or drift-detection process existed for the subaccounts after they were cloned from a shared template years earlier, so 18+ months of independent, undocumented administrative changes accumulated without any record of intent or approval.",
+    "resolution": "Produced a certified current-state authorization inventory per subaccount for the deal data room, explicitly disclosing unattributable drift as a known risk rather than presenting an inaccurate clean picture, and recommended the buyer's team adopt IaC-based governance post-close.",
+    "preventiveMeasures": ["Implement IaC-managed subaccount configuration with version-controlled history going forward", "Run scheduled automated drift reports on a recurring cadence, not only during transactional events like M&A", "Require change-ticket linkage for any manual trust or role collection modification"],
+    "diagram": "flowchart LR\n  A[Original Shared Template] --> B1[Subaccount 1]\n  A --> B2[Subaccount 2]\n  A --> B3[Subaccount ... 12]\n  B1 --> C1[18mo Undocumented Drift]\n  B2 --> C2[18mo Undocumented Drift]\n  B3 --> C3[18mo Undocumented Drift]\n  C1 --> D[Due Diligence: Reconstruct + Classify + Disclose]\n  C2 --> D\n  C3 --> D"
+  }
+]

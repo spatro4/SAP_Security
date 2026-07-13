@@ -1,0 +1,130 @@
+[
+  {
+    "id": "prod-s1",
+    "category": "production-support-migration",
+    "title": "Order Create Fails for One Plant After S/4HANA Cutover - Client Not Set on Transported Role",
+    "difficulty": "Hard",
+    "situation": "Immediately after go-live weekend of an S/4HANA conversion, order creation works correctly for every plant except one newly onboarded plant that was added late in the project. Users at that plant report VA01 authorization failures. The war room initially suspects an org structure data issue since it's isolated to one plant.",
+    "troubleshootingSteps": [
+      "Reproduce the failure with an affected user and pull SU53 to confirm the exact failing authorization object.",
+      "Run STAUTHTRACE against a test transaction to capture the complete authorization check sequence rather than relying on SU53's single most-recent failure.",
+      "Compare the derived role's org-value authorization data for the new plant against a working plant's derived role.",
+      "Check the transport log for the derived role covering the new plant to confirm whether the generated profile was actually imported into production or only the role definition without regeneration.",
+      "Verify the role's transport request contents against the standard transport object types expected for a PFCG role (role definition plus generated profile) rather than assuming a clean import."
+    ],
+    "toolsUsed": ["SU53", "STAUTHTRACE", "PFCG", "SE01"],
+    "tablesChecked": ["AGR_1251", "AGR_USERS"],
+    "authObjects": ["M_BEST_WRK", "V_VBAK_VKO"],
+    "rootCause": "The derived role for the new plant was created and correctly generated in the QA system late in the project timeline, but the transport request capturing it was released before the final regeneration step completed, so the transport contained the role definition without a valid generated profile. The import into production succeeded without error, but the resulting role in production had no usable authorization data for the new plant's org values.",
+    "resolution": "Regenerated the affected role directly in production following emergency change procedures, confirmed correct authorization values matched a working plant's pattern, and had affected users re-log in to rebuild their authorization buffers. The two-hour delay in identifying this was attributed to the war room initially theorizing an org-structure data problem before a security architect insisted on running STAUTHTRACE, which immediately pointed to the authorization layer rather than org data.",
+    "preventiveMeasures": [
+      "Add a standard pre-transport-release checklist step confirming role generation completed successfully after any late-cycle role change.",
+      "Add a post-import validation step comparing generated profile existence and authorization value counts across environments as part of the go-live checklist.",
+      "Reinforce 'trace before theorizing' as a mandatory first diagnostic step for any authorization-adjacent incident, regardless of how plausible an alternative theory feels."
+    ],
+    "relatedQuestionIds": ["prod-q2", "prod-q4"],
+    "diagram": "flowchart TD\n  A[Derived Role Created Late in Project] --> B[Generated in QA]\n  B --> C[Transport Released Before Final Regeneration]\n  C --> D[Import to Production Succeeds Without Error]\n  D --> E[Role Has No Usable Authorization Data for New Plant]\n  E --> F[VA01 Fails Only for New Plant Users]\n  F --> G[War Room Theorizes Org-Data Issue for 2 Hours]\n  G --> H[STAUTHTRACE Reveals True Authorization-Layer Cause]"
+  },
+  {
+    "id": "prod-s2",
+    "category": "production-support-migration",
+    "title": "SU25 Skipped in Migration Plan Surfaces as Silent Authorization Object Gap Post-Go-Live",
+    "difficulty": "Architect",
+    "situation": "Three weeks after an S/4HANA go-live, a subset of procurement users begin reporting intermittent authorization failures on a transaction that worked fine in the legacy ECC system and passed UAT. No related transports or role changes were made in that window.",
+    "troubleshootingSteps": [
+      "Confirm the exact failing authorization object via STAUTHTRACE and check whether it's an object that existed in the legacy system's role.",
+      "Review the migration project's SU25 execution log to determine whether this specific object's check indicator was part of any comparison step.",
+      "Check whether the object was newly introduced or newly changed to 'Check/Maintain' by the S/4HANA target release compared to the legacy ECC release.",
+      "Determine whether the role in question was migrated/converted without incorporating the new SU25-driven default for this object.",
+      "Sample other roles for the same gap to assess the true scope of affected roles beyond the reporting users."
+    ],
+    "toolsUsed": ["STAUTHTRACE", "SU25", "PFCG"],
+    "tablesChecked": ["USOBX_C", "USOBT_C", "AGR_1251"],
+    "authObjects": ["M_EINK_FRG"],
+    "rootCause": "The migration project plan treated SU25 as a single automated technical step executed by the Basis team with no functional/security review, and allocated no time for reviewing the comparison results. A release-value-approval authorization object had its check indicator changed from 'Check' to 'Check/Maintain' in the target release, meaning it now needed to be proposed and added to affected roles, but because SU25's affected-role list was never reviewed, the converted roles never received the new authorization, and the gap only manifested for users attempting the specific release-approval workflow step that UAT hadn't exercised.",
+    "resolution": "Reviewed the full SU25 affected-roles output that had never been actioned, identified all roles missing the object, added it with the correct field values, and regenerated. Communicated the scope of the gap to the procurement business owner since some approval transactions may have failed silently during the three-week window, requiring a review of whether any approvals were incorrectly blocked or, conversely, incorrectly allowed via an alternate path.",
+    "preventiveMeasures": [
+      "Formally resource SU25 review as a security/functional workstream with dedicated time in every future upgrade or migration project plan, not a single unattended Basis task.",
+      "Require sign-off from the security lead on the SU25 affected-roles list before go-live, with evidence the list was actually reviewed and actioned.",
+      "Extend UAT test scripts specifically to exercise every transaction associated with an SU25-flagged object change, not just standard happy-path scenarios."
+    ],
+    "relatedQuestionIds": ["prod-q3", "prod-q4"]
+  },
+  {
+    "id": "prod-s3",
+    "category": "production-support-migration",
+    "title": "Emergency Access Grant from a Prior Incident Discovered Still Active Nine Months Later",
+    "difficulty": "Medium",
+    "situation": "During an unrelated access review, a security analyst discovers a user has held broad manual authorization (added directly to their role, not via Firefighter) since a production incident nine months earlier, with no record of the grant ever being reviewed, narrowed, or time-boxed.",
+    "troubleshootingSteps": [
+      "Pull the change history for the role in question to confirm exactly when the broad authorization was added and by whom.",
+      "Cross-reference the change date against the incident ticket system to confirm which incident it corresponds to.",
+      "Review the original incident ticket to determine whether a follow-up root-cause fix or access review was ever documented as a required next step.",
+      "Interview the original responder and the user's manager to understand why the access was never revisited.",
+      "Assess actual usage of the broad access over the nine-month period to determine risk exposure."
+    ],
+    "toolsUsed": ["PFCG change documents", "SUIM"],
+    "tablesChecked": ["AGR_1251", "AGR_USERS"],
+    "authObjects": [],
+    "rootCause": "During the original incident, under war-room time pressure, the responding engineer added the broadly-scoped authorization directly to the user's permanent role rather than using the time-boxed Firefighter/emergency access process, reasoning it would be 'temporary' and cleaned up shortly after. The incident ticket was closed once the immediate business impact resolved, with no follow-up task created to review or remove the grant, and no periodic access review caught it because it was embedded within an otherwise normal-looking role rather than flagged as an emergency grant.",
+    "resolution": "Reviewed actual usage logs confirming the broad access had rarely been exercised since the initial incident, removed the unnecessary authorization, and replaced the user's legitimate ongoing need (a much narrower subset of the original grant) with a properly scoped permanent addition. Reported the finding as a process control gap in the incident management lifecycle.",
+    "preventiveMeasures": [
+      "Mandate that any access change made during a production incident use the time-boxed Firefighter/emergency access mechanism, never a direct permanent role edit, regardless of how quickly it feels resolvable.",
+      "Add a mandatory follow-up task to every incident ticket involving an access change, requiring confirmation the access was reviewed and either removed or properly formalized within a defined window.",
+      "Include incident-driven role changes as a specific, flagged category in periodic access reviews rather than relying on them being caught as part of general review."
+    ],
+    "relatedQuestionIds": ["prod-q6", "prod-q11"],
+    "diagram": "flowchart TD\n  A[Production Incident Under Time Pressure] --> B[Broad Authorization Added Directly to Role]\n  B --> C[Incident Closed - Immediate Impact Resolved]\n  C --> D[No Follow-up Task Created]\n  D --> E[Access Embedded in Normal-Looking Role]\n  E --> F[Missed by Periodic Access Review]\n  F --> G[Discovered 9 Months Later During Unrelated Review]"
+  },
+  {
+    "id": "prod-s4",
+    "category": "production-support-migration",
+    "title": "VP-Driven SAP_ALL Grant During Incident Surfaces as a Material Audit Finding",
+    "difficulty": "Manager",
+    "situation": "During a severe production incident, a VP on the bridge call insisted a user be granted SAP_ALL to eliminate any possibility of an authorization-related delay while a root cause was being investigated. The on-call engineer complied under pressure. Six months later, an external SOX audit identifies the still-active SAP_ALL assignment as a critical finding.",
+    "troubleshootingSteps": [
+      "Confirm the exact date and justification recorded (if any) for the SAP_ALL assignment.",
+      "Determine whether the grant was ever reviewed, time-boxed, or flagged for removal after the incident closed.",
+      "Assess actual activity performed by the user under SAP_ALL since the grant, to establish actual risk exposure and audit scope.",
+      "Identify whether similar undocumented emergency grants exist elsewhere in the landscape from other past incidents.",
+      "Determine what governance step was missing that allowed a permanent grant of this severity to be made without an approval or expiry mechanism."
+    ],
+    "toolsUsed": ["SUIM", "PFCG change documents", "SM20"],
+    "tablesChecked": ["AGR_USERS", "USR02"],
+    "authObjects": [],
+    "rootCause": "No time-boxed emergency access mechanism was invoked; under direct pressure from a VP on the incident bridge, SAP_ALL was assigned as a permanent role/profile addition with the stated intention of removing it 'once things calmed down.' No incident closure checklist required confirming temporary access changes were reversed, and no periodic access review flagged the assignment specifically as originating from an emergency context, since it was indistinguishable in reporting from any other profile assignment.",
+    "resolution": "Removed the SAP_ALL assignment immediately upon discovery, replaced it with the user's actual legitimate access needs, and conducted a full retroactive review of all activity performed under the broad access to confirm no inappropriate transactions occurred during the six-month window. The finding was disclosed to the audit committee along with a remediation plan addressing the underlying governance gap.",
+    "preventiveMeasures": [
+      "Establish a hard policy that no permanent, non-time-boxed broad access grant (including SAP_ALL) may be assigned during an incident under any stakeholder pressure, with the time-boxed Firefighter path as the only sanctioned alternative.",
+      "Require dual sign-off (security lead plus incident commander) for any exception to this policy, with automatic expiry built in regardless.",
+      "Add a mandatory incident-closure checklist item specifically confirming any access changes made during the incident were either removed or formally converted to a reviewed, justified permanent change."
+    ],
+    "relatedQuestionIds": ["prod-q6", "prod-q11", "prod-q12"]
+  },
+  {
+    "id": "prod-s5",
+    "category": "production-support-migration",
+    "title": "Fiori Catalog Design Underestimated, Causing a Two-Week Go-Live Delay",
+    "difficulty": "Hard",
+    "situation": "Six weeks before a planned S/4HANA go-live, UAT testing reveals that dozens of business users cannot see the Fiori apps they need despite having what the project team believed were correctly converted roles, forcing a scramble that ultimately delays go-live by two weeks.",
+    "troubleshootingSteps": [
+      "Sample several affected users and confirm whether the issue is backend authorization (OData/CDS-level) or launchpad visibility (catalog/space assignment).",
+      "Review the project's role conversion approach to determine how Fiori catalog assignment was originally planned and executed.",
+      "Map the affected users' business processes against the specific catalogs assigned to their converted roles to identify systematic gaps versus isolated cases.",
+      "Determine whether custom Fiori apps built for this implementation have corresponding custom catalogs created and assigned, or were overlooked entirely.",
+      "Assess the total remediation effort required versus the remaining project timeline to determine whether go-live must be delayed."
+    ],
+    "toolsUsed": ["PFCG", "Fiori Launchpad Designer"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The project's role redesign workstream treated Fiori catalog assignment as a mechanical, near-automatic step appended to the end of the legacy role conversion process rather than a distinct design effort. Several custom Fiori apps built specifically for this implementation had never had corresponding business catalogs created at all, and a significant number of converted roles were assigned SAP's standard delivered catalogs without validating they actually matched the business's specific process boundaries, leaving many users with backend authorization but no visible tile, and a smaller number with visible tiles blocked by CDS-level authorization gaps.",
+    "resolution": "Stood up a dedicated Fiori catalog remediation team working in parallel with final cutover preparation, created the missing custom catalogs, corrected catalog-to-role assignments against a properly validated business-process mapping, and re-ran a focused UAT cycle on launchpad visibility specifically. Go-live was delayed two weeks to accommodate this work rather than risk a go-live with widespread inability to access needed apps.",
+    "preventiveMeasures": [
+      "Plan Fiori catalog, space, and page design as an explicit, resourced workstream with its own timeline and validation cycle in every future S/4HANA migration, distinct from classic role/authorization conversion.",
+      "Require a business-process-to-catalog mapping exercise validated by functional teams early in the project, not assumed to follow automatically from legacy role conversion.",
+      "Include dedicated launchpad visibility testing (not just backend authorization testing) as a mandatory UAT test category."
+    ],
+    "relatedQuestionIds": ["prod-q5", "prod-q8"],
+    "diagram": "flowchart TD\n  A[Fiori Catalog Assignment Treated as Mechanical Conversion Step] --> B[No Distinct Design Workstream]\n  B --> C[Custom Apps Missing Corresponding Catalogs]\n  B --> D[Standard Catalogs Assigned Without Business Validation]\n  C --> E[UAT Reveals Widespread Tile Visibility Gaps]\n  D --> E\n  E --> F[Two-Week Go-Live Delay for Remediation]"
+  }
+]

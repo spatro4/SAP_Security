@@ -1,0 +1,109 @@
+[
+  {
+    "id": "hana-s1",
+    "category": "hana-security",
+    "title": "Troubleshooting a Missing Analytic Privilege Row-Level Restriction",
+    "difficulty": "Medium",
+    "situation": "A regional sales manager reports being able to see order data for regions outside their assigned scope when running a report against a HANA calculation view, despite the equivalent ABAP-layer report correctly restricting them to their own region.",
+    "troubleshootingSteps": [
+      "Confirm whether the report path in question queries the calculation view directly (BI tool or direct SQL) or goes through the ABAP application layer.",
+      "If direct, review the technical or named user's assigned HANA roles via HANA Cockpit.",
+      "Check whether any Analytic Privilege is assigned to that role at all for the calculation view in question.",
+      "If an Analytic Privilege exists, verify its actual attribute-based restriction condition matches the intended regional scoping.",
+      "Test the query as that user in a controlled session to confirm the row-level filtering behavior after any correction.",
+      "Cross-check that Object Privileges on the underlying view are not independently broader than intended."
+    ],
+    "toolsUsed": ["HANA Cockpit", "HANA SQL console (test queries)"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The calculation view was queried through a BI tool connecting directly to HANA, a path that entirely bypasses ABAP-layer authorization; the HANA role assigned to that BI connection had never been configured with an Analytic Privilege restricting rows by region, even though the equivalent ABAP report's org-level authorization correctly restricted the same user.",
+    "resolution": "Created and assigned an Analytic Privilege to the BI tool's HANA role, restricting visible rows by the same regional attribute enforced at the ABAP layer, bringing both access paths into consistent alignment.",
+    "preventiveMeasures": ["Whenever a new BI/reporting tool is granted direct HANA access to a view already governed by ABAP-layer org-level restrictions, mirror that restriction as an Analytic Privilege as a mandatory step", "Periodically test direct-access paths against the same restriction expectations validated for the ABAP layer", "Maintain an inventory mapping which views have direct access paths and whether Analytic Privileges have been validated for each"]
+  },
+  {
+    "id": "hana-s2",
+    "category": "hana-security",
+    "title": "BI Tool Exposing Unmasked Sensitive Columns",
+    "difficulty": "Medium",
+    "situation": "During a data privacy review, an auditor discovers that a self-service BI tool connected directly to HANA displays unmasked national ID numbers and salary figures to users who only needed the data for headcount reporting purposes.",
+    "troubleshootingSteps": [
+      "Identify the specific HANA technical/named user and role the BI tool uses for its connection.",
+      "Review the role's Object Privileges to confirm which columns of the sensitive table/view are technically accessible.",
+      "Check whether any Dynamic Data Masking rule is configured at all for the sensitive columns in question.",
+      "Confirm whether the masking rule, if present, is actually applied to the role in use rather than only to a different, unused role.",
+      "Design and apply column-level Dynamic Data Masking for the specific sensitive fields, verifying the BI tool's reporting use case doesn't genuinely require the unmasked value.",
+      "Retest the BI tool's report output to confirm masked values now display correctly while headcount aggregation still functions."
+    ],
+    "toolsUsed": ["HANA Cockpit", "BI tool connection/role review"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "No Dynamic Data Masking rule had ever been configured for the sensitive columns; the BI tool's role was granted Object Privileges sufficient for its legitimate reporting need, but nothing at the column level prevented the sensitive fields from being returned in the clear.",
+    "resolution": "Implemented Dynamic Data Masking on the national ID and salary columns for the role used by the BI tool's connection, preserving its ability to perform headcount aggregation while eliminating exposure of the sensitive raw values.",
+    "preventiveMeasures": ["Classify sensitive columns during initial data model design and require an explicit masking decision before any reporting tool is granted access", "Include column-level masking review as a standard step whenever a new BI or reporting connection is onboarded", "Periodically re-review masking configuration against actual reporting use cases to confirm scope hasn't drifted"],
+    "diagram": "flowchart LR\n  A[BI Tool Query] --> B[Object Privilege Check]\n  B --> C{Masking Rule Configured?}\n  C -->|No| D[Sensitive Columns Returned in Clear]\n  C -->|Yes| E[Masked Values Returned]\n  D --> F[Apply Dynamic Data Masking]\n  F --> E"
+  },
+  {
+    "id": "hana-s3",
+    "category": "hana-security",
+    "title": "Discovering an Unrestricted Shared Technical User for Direct HANA Access",
+    "difficulty": "Hard",
+    "situation": "An infrastructure security review, conducted independently of a recently completed and clean ABAP authorization audit, finds a BI reporting tool connects directly to HANA using a shared technical database user with essentially unrestricted SELECT access across all schemas.",
+    "troubleshootingSteps": [
+      "Inventory every report and dashboard actually built on top of this shared technical user's connection.",
+      "Determine the minimum set of schemas, tables, and views genuinely required across all identified legitimate reporting use cases.",
+      "Design a dedicated repository role (or set of roles) granting only that minimum required Object Privilege scope.",
+      "Layer Analytic Privileges and Dynamic Data Masking matching the equivalent ABAP-layer restrictions for the same underlying data.",
+      "Create a new, appropriately scoped technical user for the BI tool and migrate the tool's connection to it in a controlled cutover.",
+      "Enable HANA audit policies on the new technical user's activity and formally decommission the old unrestricted account."
+    ],
+    "toolsUsed": ["HANA Cockpit", "Repository role development tooling", "BI tool connection configuration"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The BI tool's direct HANA connection was originally set up using a broad, pre-existing technical user as a convenient shortcut, and no HANA-native privilege design was ever performed independently of the ABAP-layer authorization already in place, leaving direct access completely unrestricted regardless of how well-designed the PFCG roles were.",
+    "resolution": "Migrated the BI tool to a newly created, narrowly-scoped technical user backed by dedicated repository roles with matching Analytic Privileges and Dynamic Data Masking, and enabled independent audit logging for that user, closing the gap entirely uncovered by the prior ABAP-focused audit.",
+    "preventiveMeasures": ["Never approve reuse of an existing broad technical database user for a new integration or reporting tool", "Treat every new direct-to-HANA access request as its own full security design exercise, not a configuration shortcut", "Scope future security assessments to explicitly include an inventory of all direct database access paths, not only the ABAP application layer"]
+  },
+  {
+    "id": "hana-s4",
+    "category": "hana-security",
+    "title": "No Forensic Trail After a Suspected Direct Database Access Incident",
+    "difficulty": "Hard",
+    "situation": "Following a suspected data exfiltration event involving a BI tool with direct HANA access, the incident response team searches ABAP-level change documents and Read Access Logging but finds no relevant entries whatsoever for the suspected activity.",
+    "troubleshootingSteps": [
+      "Confirm the suspected access path was indeed a direct SQL/BI-tool connection to HANA rather than any ABAP application-layer transaction.",
+      "Check whether HANA audit policies were enabled at all for the relevant technical user, objects, or privilege usage.",
+      "If enabled, review whatever audit log entries do exist via HANA Cockpit to reconstruct the actual activity timeline.",
+      "If not enabled, acknowledge the forensic gap explicitly to the incident response and legal/compliance stakeholders rather than assuming ABAP logs provide equivalent coverage.",
+      "Immediately configure and enable appropriate HANA audit policies covering this access path going forward.",
+      "Reassess the technical user's actual privilege scope as part of the same incident response, since the incident also likely revealed excessive access."
+    ],
+    "toolsUsed": ["HANA Cockpit", "HANA audit policy configuration", "Incident response process documentation"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "HANA audit policies had never been enabled for the direct database access path in question; because ABAP-level change documents and Read Access Logging only capture activity flowing through the ABAP application server, the direct SQL/BI-tool access left literally no forensic trail anywhere in the landscape.",
+    "resolution": "Enabled comprehensive HANA audit policies for the relevant technical users, objects, and privilege usage going forward, and formally documented the pre-existing forensic gap and its remediation as part of the incident response findings.",
+    "preventiveMeasures": ["Treat HANA audit policy configuration as a mandatory, independent control - never assumed to be covered by ABAP-level logging", "Periodically test that audit logging is actually capturing expected activity across every known direct database access path", "Include HANA audit policy coverage explicitly in incident response readiness assessments"]
+  },
+  {
+    "id": "hana-s5",
+    "category": "hana-security",
+    "title": "Performance Degradation After Adding Complex Analytic Privilege Conditions",
+    "difficulty": "Hard",
+    "situation": "After adding a new set of Analytic Privilege conditions to a high-volume calculation view to satisfy a new row-level restriction requirement, users across the board report significantly slower report execution, well beyond what the additional filtering logic alone should explain.",
+    "troubleshootingSteps": [
+      "Confirm the performance regression's timing correlates precisely with the Analytic Privilege change rather than an unrelated data volume increase.",
+      "Review the actual structure of the new Analytic Privilege condition for inefficient attribute lookups or overly complex nested conditions.",
+      "Use HANA Cockpit's performance monitoring to capture query execution plans before and after the change on representative queries.",
+      "Test whether restructuring the analytic privilege condition (e.g., simplifying attribute joins, indexing supporting attribute tables) reduces the overhead.",
+      "Validate the optimized configuration against realistic production data volumes in a non-production system before redeploying.",
+      "Redeploy the optimized Analytic Privilege configuration and confirm report execution times return to acceptable levels."
+    ],
+    "toolsUsed": ["HANA Cockpit performance monitoring", "SQL execution plan analysis"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The newly added Analytic Privilege condition relied on a complex, poorly indexed attribute lookup evaluated for every row of a high-volume view on every query execution, adding substantial overhead that wasn't caught during initial functional testing on smaller data volumes.",
+    "resolution": "Restructured the Analytic Privilege condition to use a more efficient attribute lookup path and added supporting indexes, restoring acceptable query performance while preserving the required row-level restriction.",
+    "preventiveMeasures": ["Test any new Analytic Privilege or masking rule against realistic production data volumes before go-live, not only functional correctness on small test datasets", "Include HANA-native security changes in standard performance regression testing for high-volume views", "Document known-efficient Analytic Privilege condition patterns as a design standard for future row-level restriction requirements"],
+    "diagram": "flowchart LR\n  A[New Analytic Privilege Added] --> B[Query Execution]\n  B --> C{Attribute Lookup Efficient?}\n  C -->|No| D[Significant Performance Regression]\n  C -->|Yes| E[Acceptable Performance]\n  D --> F[Restructure Condition + Add Indexes]\n  F --> E"
+  }
+]

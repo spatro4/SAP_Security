@@ -1,0 +1,125 @@
+[
+  {
+    "id": "fiori-s1",
+    "category": "fiori-security",
+    "title": "Tile launches but every action inside the app fails with a backend authorization error",
+    "difficulty": "Hard",
+    "situation": "In a Fiori Hub deployment, a group of users can see and open a procurement approval tile without issue, but every attempt to approve or reject a request inside the app fails with a generic backend authorization error. The front-end business role looks complete and was recently reviewed with no changes.",
+    "troubleshootingSteps": [
+      "Confirm the tile launch itself succeeded (S_START passed) to isolate the problem to post-launch data operations rather than app access",
+      "Check /IWFND/ERROR_LOG on the Front-End Server to see whether the request even reached the backend or failed at the hub layer",
+      "Check /IWBEP/ERROR_LOG on the backend system for the specific business authorization object referenced in the failure",
+      "Verify the affected users' backend roles independently of their front-end roles, since the two are maintained in separate systems",
+      "Confirm the trusted RFC connection or principal propagation configuration between the hub and this specific backend is functioning correctly for these users",
+      "Run STAUTHTRACE on the backend system for an affected user during a reproduction attempt to pinpoint the exact failing object and field values"
+    ],
+    "toolsUsed": ["/IWFND/ERROR_LOG", "/IWBEP/ERROR_LOG", "STAUTHTRACE", "SM59"],
+    "tablesChecked": ["AGR_1251"],
+    "authObjects": ["S_RFC", "M_MSEG_WMB"],
+    "rootCause": "A recent backend role redesign had consolidated several approval-related roles without carrying forward one org-level authorization value the approval workflow depended on; because the front-end role was reviewed and looked unchanged, the investigation initially focused on the wrong system entirely before the backend role redesign was identified as the actual point of change.",
+    "resolution": "Corrected the consolidated backend role to include the missing org-level authorization value, verified against STAUTHTRACE that the approval action now passed, and re-tested the full approve/reject workflow for the affected user group before closing the incident.",
+    "preventiveMeasures": [
+      "When troubleshooting Hub-deployment issues, always check both front-end and back-end role change history, not just the system where the symptom appears",
+      "Include end-to-end workflow testing (not just tile launch) in the test plan for any backend role redesign affecting Fiori-consumed processes",
+      "Document which backend roles each front-end catalog/app depends on to speed up this kind of cross-system triage"
+    ],
+    "diagram": "sequenceDiagram\n  participant User\n  participant FES as Front-End Hub\n  participant BE as Backend System\n  User->>FES: Open approval tile\n  FES-->>User: Tile loads (S_START OK)\n  User->>FES: Submit approval action\n  FES->>BE: Forward via trusted RFC\n  BE->>BE: AUTHORITY-CHECK fails - missing org value\n  BE-->>FES: Authorization error\n  FES-->>User: Generic error message"
+  },
+  {
+    "id": "fiori-s2",
+    "category": "fiori-security",
+    "title": "Save operation intermittently fails with a CSRF error after idle periods",
+    "difficulty": "Medium",
+    "situation": "Users report that editing and saving records in a Fiori app usually works fine but occasionally fails with an unexpected error, particularly when they leave the app open in a browser tab for a long time before making changes and saving.",
+    "troubleshootingSteps": [
+      "Reproduce the issue and capture the actual HTTP response, confirming it's a 403 with a CSRF-specific error rather than a generic authorization failure",
+      "Check the session/logon ticket timeout configuration relative to how long the app was left idle before the failing save",
+      "Confirm the app's client-side logic correctly re-fetches a CSRF token if the session has been renewed or restarted, rather than reusing a stale cached token indefinitely",
+      "Check /IWFND/ERROR_LOG for the specific CSRF validation failure entries correlating with the reported incidents",
+      "Test the same idle-then-save sequence deliberately in a controlled session to confirm the timeout threshold that triggers the failure"
+    ],
+    "toolsUsed": ["/IWFND/ERROR_LOG", "Browser network trace"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The session/logon ticket had a timeout shorter than typical user idle periods, and the SAPUI5 app's client-side code did not automatically re-fetch a fresh CSRF token after the underlying session was silently renewed, causing the stale token to be rejected on the next state-changing request.",
+    "resolution": "Adjusted the app's client-side error handling to automatically re-fetch a CSRF token and retry the save operation transparently on a 403 CSRF failure, and reviewed session timeout configuration to better match realistic user idle patterns without weakening the underlying security posture.",
+    "preventiveMeasures": [
+      "Build CSRF token re-fetch-and-retry handling into the standard custom app development template so individual app teams don't have to solve this repeatedly",
+      "Document the distinction between CSRF failures and authorization failures for the support desk so tickets are routed and diagnosed correctly the first time",
+      "Periodically review session timeout settings against real user behavior patterns rather than leaving them at historical defaults"
+    ]
+  },
+  {
+    "id": "fiori-s3",
+    "category": "fiori-security",
+    "title": "Users lose expected app access after a quarterly HR reorganization",
+    "difficulty": "Medium",
+    "situation": "Following a quarterly HR reorganization moving a group of employees to new cost centers, several of them report losing access to Fiori apps they used daily, while their PFCG role assignments appear completely unchanged in SU01.",
+    "troubleshootingSteps": [
+      "Confirm the affected users' derived roles reference org values (cost center/company code) tied to the HR organizational structure",
+      "Compare the derived roles' current org values against the users' new post-reorg HR org assignments",
+      "Check whether a mass role regeneration was run following the reorg, and if so, whether it covered every affected derived role",
+      "Check the timing gap between the HR reorg's effective date and when (or if) the derived role regeneration job ran",
+      "Manually regenerate the affected derived roles with corrected org values and confirm access is restored for a sample user before a broader fix"
+    ],
+    "toolsUsed": ["PFCG", "PPOME", "SU01"],
+    "tablesChecked": ["AGR_1251", "AGR_USERS"],
+    "authObjects": [],
+    "rootCause": "The derived roles' org values were sourced from the HR organizational structure but the regeneration process that should follow any org change either didn't trigger for this batch of employees or ran before the HR change was fully propagated, leaving the derived roles with stale org values that no longer matched the employees' new cost centers.",
+    "resolution": "Manually corrected and regenerated the affected derived roles' org values to match the new HR org structure, then implemented an explicit reconciliation step comparing HR org assignments against derived role org values on a defined schedule rather than relying solely on the reorg-triggered regeneration process.",
+    "preventiveMeasures": [
+      "Add a scheduled reconciliation job comparing current HR org data against derived role org values as an independent safety net",
+      "Extend the HR reorg change process checklist to explicitly include a verification step confirming all affected derived roles were regenerated, not just a fire-and-forget batch job",
+      "Communicate expected access-impact timing to affected employees during known reorg events so genuine issues are reported quickly"
+    ]
+  },
+  {
+    "id": "fiori-s4",
+    "category": "fiori-security",
+    "title": "Fiori app returns 404 for all users immediately after go-live",
+    "difficulty": "Easy",
+    "situation": "A newly developed Fiori app worked correctly throughout development and QA testing, but immediately after go-live in production, every user - regardless of role - receives a blank screen with an underlying 404 error when opening the app.",
+    "troubleshootingSteps": [
+      "Confirm this is affecting all users uniformly rather than a subset, which points away from an authorization-specific issue",
+      "Check the SICF node for the app's OData service and UI5 application resources in the production system specifically",
+      "Compare SICF activation state for this service between QA and production directly",
+      "Check the transport log to confirm whether SICF activation was included in the transport or requires manual activation in each target system",
+      "Activate the missing SICF node(s) in production and re-test with a single user before declaring the incident resolved"
+    ],
+    "toolsUsed": ["SICF", "STMS"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "SICF node activation is not automatically included in a standard transport and must be performed manually (or via a documented post-transport activation step) in each target system; this step was missed for production during the go-live cutover.",
+    "resolution": "Activated the required SICF nodes in production, confirmed the app loaded correctly for a test user, and verified no other recently transported services had the same activation gap.",
+    "preventiveMeasures": [
+      "Add SICF node activation as an explicit, checked step in the standard go-live cutover checklist for any new OData service or Fiori app",
+      "Build an automated post-transport verification script that checks SICF activation state for all expected services in the target system",
+      "Document which SICF nodes each Fiori app depends on as part of the app's technical documentation"
+    ]
+  },
+  {
+    "id": "fiori-s5",
+    "category": "fiori-security",
+    "title": "Multi-backend Hub deployment shows wrong region's data for one user group",
+    "difficulty": "Architect",
+    "situation": "A Fiori Hub serving three regional backend systems experiences a production incident where a specific business role's app tile works correctly for two regions but returns another region's data entirely for users in the third region, despite each region having its own dedicated backend system and role.",
+    "troubleshootingSteps": [
+      "Confirm the affected users' front-end catalog and business role assignment matches the expected region-specific configuration",
+      "Check the OData service's system alias mapping in the Gateway service activation configuration for the region in question",
+      "Compare the system alias configuration for the affected region against the two working regions to identify any discrepancy",
+      "Trace a live request from an affected user through /IWFND/ERROR_LOG to confirm which backend system alias actually received the request",
+      "Correct the system alias mapping and re-test to confirm the correct backend now responds for the affected region's users"
+    ],
+    "toolsUsed": ["/IWFND/MAINT_SERVICE", "/IWFND/ERROR_LOG", "PFCG"],
+    "tablesChecked": [],
+    "authObjects": ["S_RFC"],
+    "rootCause": "A recent configuration change intended to add a new system alias for an unrelated project had inadvertently altered the existing alias mapping for the third region's service, silently redirecting its OData calls to a different backend system than intended - the request was fully authorized and successful, just against the wrong system.",
+    "resolution": "Corrected the system alias mapping to point the affected region's service back to its intended backend, verified with a live trace that requests now routed correctly, and reviewed all other alias mappings changed as part of the same configuration change for similar collateral impact.",
+    "preventiveMeasures": [
+      "Require a documented, reviewed change process for any system alias configuration change, given the blast radius of a single mapping error",
+      "Add automated monitoring that periodically validates each service-to-backend alias mapping against an expected baseline configuration",
+      "Include cross-region data validation in the test plan whenever alias configuration changes for any single region, since the working regions' apparent success can mask a change affecting only one alias"
+    ],
+    "diagram": "flowchart TD\n  Config[Alias Config Change for New Project] -->|Unintended Side Effect| Alias3[Region 3 System Alias]\n  Alias3 -->|Now Points To| BE2[Backend Region 2]\n  Alias1[Region 1 Alias] --> BE1[Backend Region 1]\n  Alias2[Region 2 Alias] --> BE2\n  style Alias3 fill:#f96"
+  }
+]

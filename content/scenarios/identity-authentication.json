@@ -1,0 +1,87 @@
+[
+  {
+    "id": "ias-s1",
+    "category": "identity-authentication",
+    "title": "SSO fails for a single relying application while all other IAS-federated applications work",
+    "difficulty": "Hard",
+    "situation": "Users can successfully SSO into every SAP application federated through IAS except one specific Fiori Launchpad instance, which returns an authentication error immediately after IAS redirects back to it. The failure started the same day the application team redeployed with a routine platform patch.",
+    "troubleshootingSteps": [
+      "Confirm the failure is isolated to the one application by testing SSO against at least two other IAS-trusted applications with the same user.",
+      "Capture the SAML/OIDC response using a browser trace tool to inspect what is actually being returned to the failing application.",
+      "Compare the application's registered ACS URL / redirect URI in IAS's trust configuration against the application's actual current endpoint, since a platform redeploy can change the underlying route or hostname.",
+      "Check the application team's deployment change log for the patch date to confirm whether the endpoint URL, entity ID, or signing behavior changed as part of that release.",
+      "If the endpoint changed, update the trust configuration's ACS URL/redirect URI in IAS to match, or coordinate with the application team to keep the endpoint stable across deployments.",
+      "Re-test SSO end-to-end and confirm with a broader sample of users, not just one, before closing the incident."
+    ],
+    "toolsUsed": ["Browser trace tool (SAML-tracer)", "IAS Admin Console trust configuration", "Application deployment logs"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The application's routine platform patch silently changed its callback endpoint URL, which no longer matched the ACS URL registered in IAS's trust configuration for that application, causing every assertion to be rejected at the redirect step.",
+    "resolution": "Updated the ACS URL in the IAS trust configuration to match the application's new endpoint, and asked the application team to treat their SSO callback URL as a stable, change-controlled value going forward.",
+    "preventiveMeasures": ["Require application teams to notify the identity team before any deployment that could change SSO-relevant endpoints", "Add automated synthetic SSO monitoring per relying application to catch this within minutes rather than waiting for user reports", "Document each application's trust configuration dependencies in a shared change-control checklist"]
+  },
+  {
+    "id": "ias-s2",
+    "category": "identity-authentication",
+    "title": "Conditional authentication policy silently blocks a newly formed department after a reorg",
+    "difficulty": "Medium",
+    "situation": "Following an organizational restructuring, an entire newly formed department cannot complete SSO to any application, while employees who moved from other departments into the new one report the failure started exactly on their transfer effective date.",
+    "troubleshootingSteps": [
+      "Confirm the failure correlates precisely with the users' group/department attribute change rather than any system-wide event.",
+      "Review IAS's conditional authentication policies for any rule scoped by group or department attribute that could apply differently to the new department's group value.",
+      "Check whether the corporate IdP (e.g., Azure AD Conditional Access) has an independent, separately-managed policy also scoped by group or OU that might be blocking access one layer upstream of IAS.",
+      "Verify whether IPS has synchronized the users' new department/group attribute correctly and promptly, or whether they are stuck evaluating against a stale attribute value in a policy engine cache.",
+      "Identify the specific rule at fault (IAS-side or IdP-side) and correct or add an explicit inclusion for the new department's group value.",
+      "Communicate to the reorg planning team that any new department/group must include an identity-conditional-policy review as part of the standard reorg checklist."
+    ],
+    "toolsUsed": ["IAS Admin Console", "Corporate IdP Conditional Access policy console", "IPS job logs"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "A conditional authentication policy at the corporate IdP layer explicitly enumerated allowed department groups rather than using a default-allow with exceptions, so the newly created department group was implicitly excluded until manually added.",
+    "resolution": "Added the new department's group to the corporate IdP's conditional access allow-list and confirmed IPS attribute sync was current, restoring SSO for all affected users within the hour.",
+    "preventiveMeasures": ["Redesign conditional access group rules to use default-allow-with-exceptions rather than explicit enumeration where feasible", "Add identity/access policy review as a mandatory checklist item for HR-driven reorg changes", "Set up alerting for authentication failure spikes correlated with specific attribute values"],
+    "diagram": "flowchart TD\n  A[Reorg Creates New Department Group] --> B{Conditional Access Policy}\n  B -->|Enumerated Allow-List| C[New Group Not Listed]\n  C --> D[SSO Blocked for All Members]\n  B -->|Default-Allow Model| E[SSO Would Have Succeeded]"
+  },
+  {
+    "id": "ias-s3",
+    "category": "identity-authentication",
+    "title": "Certificate rotation on the corporate IdP breaks SAML2 trust to a subset of IAS-federated applications",
+    "difficulty": "Architect",
+    "situation": "The corporate IdP team rotated their SAML signing certificate as part of a routine annual renewal. Immediately afterward, SSO began failing for on-premise ABAP applications federated through IAS, while cloud-native OIDC applications continued working normally.",
+    "troubleshootingSteps": [
+      "Confirm the split failure pattern: SAML2-protocol applications failing while OIDC applications work, pointing at the SAML signature validation chain specifically.",
+      "Check IAS's corporate identity provider configuration to see whether the new signing certificate was updated there, since IAS validates the incoming assertion signature against its stored copy.",
+      "If IAS was updated correctly, check each downstream SAML2 relying application's own trust configuration, since some legacy on-premise ABAP systems maintain a locally cached copy of the IdP certificate via STRUST rather than dynamically trusting IAS's current certificate.",
+      "Identify which specific ABAP systems still have the old certificate in their STRUST PSE and update the trust store with the new certificate.",
+      "Re-test SSO against each affected system and confirm no additional systems are impacted before closing.",
+      "Document every downstream system holding a locally cached certificate copy so future rotations update all of them proactively."
+    ],
+    "toolsUsed": ["IAS Admin Console", "STRUST", "SAML2 transaction"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "Several legacy on-premise ABAP systems maintained their own locally cached copy of the corporate IdP's SAML signing certificate in STRUST rather than dynamically retrieving current trust metadata, so the routine certificate rotation was not propagated to them automatically.",
+    "resolution": "Manually updated the STRUST PSE with the new certificate on each affected ABAP system and re-validated SSO across the full application portfolio.",
+    "preventiveMeasures": ["Maintain a definitive inventory of every system with a locally cached IdP certificate copy requiring manual update on rotation", "Where possible, configure metadata-based dynamic trust refresh instead of static certificate import", "Add certificate expiry/rotation to the standard change-management calendar shared across identity and Basis teams"],
+    "diagram": "sequenceDiagram\n  participant IdP as Corporate IdP\n  participant IAS\n  participant ABAP as On-Prem ABAP (STRUST)\n  participant Cloud as OIDC Cloud App\n  IdP->>IdP: Rotate SAML Signing Certificate\n  IdP->>IAS: New certificate propagated automatically\n  IAS->>Cloud: OIDC flow unaffected\n  IAS->>ABAP: SAML assertion signed with new cert\n  ABAP->>ABAP: STRUST still holds OLD cached certificate\n  ABAP-->>IAS: Signature validation fails"
+  },
+  {
+    "id": "ias-s4",
+    "category": "identity-authentication",
+    "title": "Executive travel triggers repeated false-positive risk-based authentication blocks",
+    "difficulty": "Medium",
+    "situation": "A senior executive who travels internationally frequently is repeatedly locked out of SSO due to IAS's risk-based conditional authentication flagging logins from new countries as high risk and requiring a step-up factor the executive hasn't enrolled in.",
+    "troubleshootingSteps": [
+      "Review the specific conditional authentication rule that triggered, including which risk signal (impossible travel, new country, new device) fired.",
+      "Confirm the executive is actually enrolled in the step-up factor the policy requires, since the block may simply be an enrollment gap rather than a policy design flaw.",
+      "Evaluate whether the underlying policy design is too rigid for a legitimately mobile user population versus genuinely catching risk.",
+      "Enroll the executive (and similarly mobile users) in a phishing-resistant step-up factor such as a FIDO2 hardware key that works reliably regardless of network location.",
+      "Consider adding a managed-device trust signal to the policy so a recognized corporate laptop reduces reliance on network-location-based risk signals alone."
+    ],
+    "toolsUsed": ["IAS Admin Console", "Conditional Authentication policy logs"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The conditional authentication policy relied heavily on network location as a risk signal without accounting for a managed-device trust signal or a properly enrolled step-up factor, causing legitimate travel to repeatedly trigger false-positive blocks.",
+    "resolution": "Enrolled the affected executives in FIDO2 hardware key step-up authentication and added managed-device trust as an additional risk signal to reduce reliance on network location alone.",
+    "preventiveMeasures": ["Proactively enroll frequently traveling employees in phishing-resistant step-up factors during onboarding to travel-heavy roles", "Incorporate managed-device trust signals into risk scoring rather than network location alone", "Review and tune conditional authentication policies periodically using real usage data, not just initial design assumptions"]
+  }
+]

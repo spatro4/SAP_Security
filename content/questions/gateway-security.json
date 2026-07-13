@@ -1,0 +1,359 @@
+[
+  {
+    "id": "gw-q1",
+    "category": "gateway-security",
+    "difficulty": "Easy",
+    "question": "What's the difference between activating a service in SICF and the authorization objects that later gate its use, and why must both be checked before assuming access is granted?",
+    "hints": [
+      "SICF is system-wide plumbing, not user-specific",
+      "Think about which one produces a 404 versus a 401/403"
+    ],
+    "expectedAnswer": "SICF activation is a system-wide switch determining whether the service's ICF node exists and responds at all, independent of any user; authorization objects (like S_SERVICE, and the service's own business authorization checks) are evaluated per-user afterward - an inactive node returns a 404 for everyone, while an active-but-unauthorized request returns a 401/403 for specific users, so the two failure modes point troubleshooting in different directions.",
+    "detailedAnswer": "SICF governs whether the HTTP handler for a given path even exists and is switched on in the ICF tree - this has nothing to do with any particular user's authorizations and, if inactive, produces a uniform 404 for every request regardless of who sends it. Once the node is active, the request proceeds to authorization evaluation: first coarse-grained checks like S_SERVICE controlling whether the user may invoke the service at all, then the service implementation's own business-level authorization checks (classic AUTHORITY-CHECK or DCL-based row filtering) against the actual data being requested. Conflating these two layers is one of the most common time-wasters in Gateway troubleshooting - a blanket failure affecting all users almost always means SICF, while a failure isolated to specific users almost always means authorization data, and starting in the wrong place burns significant troubleshooting time.",
+    "followUps": [
+      "What symptom would immediately tell you SICF activation, rather than authorization, is the root cause?",
+      "Does SICF activation state transport automatically between systems?"
+    ],
+    "commonMistakes": [
+      "Investigating role assignments before confirming the SICF node is active",
+      "Assuming a service that worked in QA is automatically active in production after transport"
+    ],
+    "tcodes": [
+      "SICF",
+      "SU21"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_SERVICE"
+    ],
+    "scenario": "A newly transported OData service returns 404 for every single user in production despite working for every user in QA.",
+    "tags": [
+      "SICF",
+      "Fundamentals"
+    ]
+  },
+  {
+    "id": "gw-q2",
+    "category": "gateway-security",
+    "difficulty": "Medium",
+    "question": "Explain the structure of a $batch request and what 'partial failure' actually means for a changeset within it.",
+    "hints": [
+      "Think multipart MIME body containing individual requests grouped by atomicity",
+      "A changeset is meant to be all-or-nothing"
+    ],
+    "expectedAnswer": "A $batch request bundles multiple individual OData operations into a single multipart MIME HTTP request; operations grouped into a changeset are treated as one atomic unit (all succeed or all roll back together), while independent GET requests in the same batch outside any changeset are executed and evaluated separately - so 'partial failure' means one changeset within the batch failed while other parts of the same batch succeeded, and the top-level HTTP response can look successful even though an embedded part failed.",
+    "detailedAnswer": "The $batch endpoint accepts a single HTTP request whose body is a multipart/mixed payload containing several individual operations, each with its own method, URL, and body, exactly as if they'd been sent separately. Operations the client explicitly groups into a changeset are meant to be transactionally atomic - if any single operation in that changeset fails, the whole changeset is rolled back - while plain read (GET) operations placed in the batch but outside any changeset are independent of each other and of any changeset, executed and reported individually. This creates the specific 'partial failure' pattern experienced clients must handle: the outer HTTP response to the $batch call itself is often 200 or 202 regardless, because the batch mechanism succeeded in processing the request; the actual success or failure of each embedded part is reported inside the multipart response body, meaning a client (or a support engineer) that only checks the top-level HTTP status can completely miss that one changeset inside the batch failed.",
+    "followUps": [
+      "Why is it a common bug for a Fiori app's error handling to miss an embedded changeset failure?",
+      "How would you write a monitoring check that correctly surfaces embedded batch part failures rather than just top-level HTTP status?"
+    ],
+    "commonMistakes": [
+      "Assuming a 200/202 on the outer $batch response means every operation inside succeeded",
+      "Not distinguishing changeset atomicity from the independence of standalone GET requests in the same batch"
+    ],
+    "tcodes": [
+      "/IWFND/GW_CLIENT",
+      "/IWFND/ERROR_LOG"
+    ],
+    "tables": [],
+    "authObjects": [],
+    "scenario": "A Fiori app reports a save as 'successful' to the user, but one of three related records in the same save operation never actually got created in the backend.",
+    "tags": [
+      "$batch",
+      "OData"
+    ]
+  },
+  {
+    "id": "gw-q3",
+    "category": "gateway-security",
+    "difficulty": "Hard",
+    "question": "Walk through your systematic approach to troubleshooting an intermittent $batch failure that only reproduces in production and never in a test client.",
+    "hints": [
+      "Think about load-dependent conditions and authorization checks that behave differently under concurrency",
+      "Consider whether the failure is really intermittent or just infrequent in test data patterns"
+    ],
+    "expectedAnswer": "Start by capturing the actual failing part's error detail from the IWFND/IWBEP error logs during a real production occurrence rather than trying to reproduce blindly in a test client, correlate the failure timing against system load or specific data patterns only present in production, and check whether the failure is authorization-related (e.g., a specific org value only some production users hold) versus a genuine technical/locking issue that low-volume test scenarios simply don't trigger.",
+    "detailedAnswer": "Intermittent production-only $batch failures are rarely truly random - they usually correlate with something production has that a test client doesn't: real concurrency/load, a wider variety of user authorization profiles, or specific data conditions (locked records, edge-case values) that a curated test dataset never exercises. The systematic approach starts with capturing the actual failure from a real occurrence via /IWFND/ERROR_LOG and /IWBEP/ERROR_LOG rather than attempting to reproduce blind, since these logs retain the specific embedded-part error detail that the outer batch response often obscures. From there, correlate failure timestamps against system load metrics and against which specific users/roles were involved - if failures cluster around a specific authorization profile, the issue is likely an org-value or authorization gap that only certain production users hit, not a genuine race condition. If failures correlate with load or timing instead, investigate locking behavior within the changeset (two changesets in concurrent batches attempting to lock the same record) as the more likely technical cause. Reproducing the exact production condition - concurrent load and the specific user's authorization profile - in a lower environment is usually necessary before a fix can be validated with confidence.",
+    "followUps": [
+      "How would you distinguish a locking-related intermittent failure from an authorization-related one using the available logs?",
+      "What would you change about the test environment's design to catch this class of issue before production?"
+    ],
+    "commonMistakes": [
+      "Trying to reproduce the issue in a test client without first capturing production-specific error detail",
+      "Assuming 'intermittent' means random rather than correlated with a specific load or authorization condition"
+    ],
+    "tcodes": [
+      "/IWFND/ERROR_LOG",
+      "/IWBEP/ERROR_LOG",
+      "STAUTHTRACE",
+      "SM50"
+    ],
+    "tables": [],
+    "authObjects": [],
+    "scenario": "A $batch-based mass update app fails roughly one in every twenty attempts in production, but the same steps executed manually in the test client via /IWFND/GW_CLIENT never fail.",
+    "diagram": "flowchart TD\n  A[Batch Failure Reported] --> B{Reproducible in Test Client?}\n  B -->|No| C[Capture Real Failure via IWFND/IWBEP Error Log]\n  C --> D{Correlates with Specific User/Role?}\n  D -->|Yes| E[Investigate Authorization Gap]\n  D -->|No| F{Correlates with Load/Timing?}\n  F -->|Yes| G[Investigate Locking/Concurrency]\n  F -->|No| H[Investigate Data-Specific Edge Case]",
+    "tags": [
+      "Troubleshooting",
+      "Batch"
+    ]
+  },
+  {
+    "id": "gw-q4",
+    "category": "gateway-security",
+    "difficulty": "Medium",
+    "question": "What are the security and operational trade-offs between a Gateway Hub deployment and an embedded deployment?",
+    "hints": [
+      "Think network hop and single point of activation versus deployment simplicity",
+      "Consider trust configuration overhead"
+    ],
+    "expectedAnswer": "Hub deployment centralizes service activation and internet exposure in one dedicated Front-End Server, simplifying the security perimeter but adding a network hop and requiring trust configuration to every backend; embedded deployment (the S/4HANA default) runs the Gateway components directly in the backend system, simplifying architecture and removing the trust hop but meaning each backend individually manages its own service activation and internet-facing exposure surface.",
+    "detailedAnswer": "Hub deployment installs the Gateway/Fiori Front-End Server as a physically separate system in front of one or more backends, giving a single, centrally managed point for service activation, internet-facing exposure, and catalog/launchpad content - attractive for a multi-backend landscape wanting one consistent perimeter to secure and monitor, at the cost of an additional network hop for every request and the operational overhead of maintaining trusted RFC or SAML-based principal propagation to every connected backend. Embedded deployment runs the Gateway components (IW_FND/IW_BEP) directly inside the backend system itself - the S/4HANA default and increasingly the industry direction - removing the network hop and the trust configuration entirely since everything runs in one system, but this means each backend system individually owns its own service activation and, if internet-facing, its own exposure surface, which can fragment governance across a multi-backend landscape unless deliberately standardized. The right choice depends heavily on how many backends need to be exposed through a common front door versus how much a customer values deployment simplicity and reduced latency.",
+    "followUps": [
+      "Why has SAP shifted toward recommending embedded deployment for S/4HANA specifically?",
+      "How would you standardize governance across multiple embedded-deployment backends to avoid the fragmentation risk?"
+    ],
+    "commonMistakes": [
+      "Assuming Hub deployment is always more secure simply because it centralizes exposure",
+      "Not accounting for the trust configuration overhead when comparing the two approaches"
+    ],
+    "tcodes": [
+      "/IWFND/MAINT_SERVICE",
+      "SICF"
+    ],
+    "tables": [],
+    "authObjects": [],
+    "scenario": "A client with five backend systems is deciding between standing up a central Gateway Hub or activating Gateway components in each backend independently.",
+    "tags": [
+      "Architecture",
+      "Deployment"
+    ]
+  },
+  {
+    "id": "gw-q5",
+    "category": "gateway-security",
+    "difficulty": "Hard",
+    "question": "What does 'whitelisting' mean in the context of SAP Gateway/OData exposure, and what specific controls actually implement it?",
+    "hints": [
+      "Think about explicit service activation as one form, and controlled external exposure as another",
+      "Consider both an internal control and an internet-facing control"
+    ],
+    "expectedAnswer": "Whitelisting in this context means deliberately activating and exposing only the specific OData services and backend system aliases actually required - rather than broadly activating services on demand - combined with a controlled, explicit allow-list of which of those whitelisted services are exposed externally (via a reverse proxy or API management layer) versus kept internal-only.",
+    "detailedAnswer": "Internally, whitelisting means treating /IWFND/MAINT_SERVICE service activation as a deliberate allow-list exercise - activating and mapping only the specific services and system aliases a given business role genuinely requires, rather than leaving broad categories of services activated 'just in case,' since every activated service is part of the system's attack surface regardless of whether it's currently being used. Externally, a second layer of whitelisting applies to which of those internally-activated services are actually exposed to the internet or to external partners - typically enforced through a reverse proxy, API Management gateway, or Web Application Firewall sitting in front of the Gateway hub, explicitly allow-listing only the specific service endpoints intended for external consumption and blocking everything else by default, rather than exposing the entire Gateway namespace and relying on backend authorization alone to protect what shouldn't be reachable from outside. Treating internal service activation as sufficient protection on its own is a common gap - defense in depth requires the external-facing allow-list as an independent control layer, since a single Gateway misconfiguration shouldn't be the only thing standing between an internal service and the internet.",
+    "followUps": [
+      "What's the risk of relying on backend authorization alone without an external allow-list layer in front of the Gateway?",
+      "How would you audit which currently-activated services are actually being used versus activated but dormant?"
+    ],
+    "commonMistakes": [
+      "Treating internal service activation and external exposure control as the same thing",
+      "Broadly activating services 'just in case' rather than as a deliberate, minimal allow-list"
+    ],
+    "tcodes": [
+      "/IWFND/MAINT_SERVICE"
+    ],
+    "tables": [],
+    "authObjects": [],
+    "scenario": "A security assessment finds that dozens of OData services are activated and reachable from the internet through a Gateway hub with no additional access control layer in front of it.",
+    "tags": [
+      "Whitelisting",
+      "External Exposure",
+      "Governance"
+    ]
+  },
+  {
+    "id": "gw-q6",
+    "category": "gateway-security",
+    "difficulty": "Medium",
+    "question": "What's the practical difference between the IWFND and IWBEP error logs, and in what order should you check them when troubleshooting an OData error?",
+    "hints": [
+      "One layer handles protocol/routing/dispatch, the other handles the actual service implementation",
+      "Think about which layer a request passes through first"
+    ],
+    "expectedAnswer": "IWFND (Internet Communication Framework/Gateway framework layer) captures protocol-level, routing, and dispatch errors - problems occurring before or around actually invoking the service implementation - while IWBEP (Business Enablement Provider) captures errors from within the service implementation itself (the DPC/MPC classes handling the actual business logic); check IWFND first to rule out a routing/protocol-level failure, then IWBEP if the request clearly reached the service implementation.",
+    "detailedAnswer": "The Gateway framework layer (IWFND) sits closest to the HTTP request itself, handling protocol parsing, routing to the correct backend/service, and coarse-grained checks like SICF/S_SERVICE - errors surfacing here (via /IWFND/ERROR_LOG) typically indicate the request never made it into actual business logic execution at all: a routing misconfiguration, a missing system alias mapping, or a protocol-layer authorization failure. The Business Enablement Provider layer (IWBEP) sits underneath, hosting the actual service implementation classes (the data and metadata provider classes) that execute the real CRUD logic and any embedded AUTHORITY-CHECK or DCL-based filtering - errors here (via /IWBEP/ERROR_LOG) mean the request was successfully routed and began executing business logic, but failed partway through that execution. The efficient triage order is always IWFND first: if nothing appears there for the failing timeframe, the request reached the service implementation and IWBEP is where the real error detail will be, saving time compared to searching both logs in parallel without a clear hypothesis.",
+    "followUps": [
+      "What kind of error would appear in IWFND but never reach IWBEP at all?",
+      "How do SLG1 and ST22 complement these two Gateway-specific logs?"
+    ],
+    "commonMistakes": [
+      "Checking both logs simultaneously without a hypothesis about which layer the failure occurred at",
+      "Assuming all OData errors are captured in a single unified log"
+    ],
+    "tcodes": [
+      "/IWFND/ERROR_LOG",
+      "/IWBEP/ERROR_LOG",
+      "SLG1"
+    ],
+    "tables": [],
+    "authObjects": [],
+    "scenario": "An OData service call fails with a generic error message in the Fiori UI, giving no indication of where in the stack the failure actually occurred.",
+    "tags": [
+      "Troubleshooting",
+      "IWFND",
+      "IWBEP"
+    ]
+  },
+  {
+    "id": "gw-q7",
+    "category": "gateway-security",
+    "difficulty": "Architect",
+    "question": "Design the RFC trust architecture between a Gateway hub and multiple connected backend systems, and explain the security implications of getting it wrong.",
+    "hints": [
+      "Think trusted RFC versus stored user/password destinations, and principal propagation via SAML for identity continuity",
+      "Consider what a misconfigured trust relationship exposes"
+    ],
+    "expectedAnswer": "Use trusted RFC destinations (or OAuth2SAMLBearerAssertion-based principal propagation for a more modern setup) scoped tightly per backend rather than a shared stored-credential destination, layer SNC for transport encryption where required, and treat each trust relationship as an individually reviewed, monitored security object - a misconfigured or overly broad trust relationship can allow requests to reach a backend under an unintended identity or with unintended privilege, effectively bypassing the individual accountability the authorization model depends on.",
+    "detailedAnswer": "The correct pattern connects the Gateway hub to each backend using trusted RFC (SM59, marked as a trusted system relationship) or, in more modern architectures, OAuth2SAMLBearerAssertion-based principal propagation, so the user's actual identity is carried through to the backend and evaluated against that specific user's own authorizations there - rather than a shared, stored-credential RFC destination that would make every hub-originated request appear as one generic technical user on the backend, destroying individual accountability and audit traceability. Each trust relationship should be scoped as narrowly as the integration requires (limited to the specific backend it needs to reach, not a blanket trust-all configuration), encrypted via SNC where the network path warrants it, and treated as its own governed security object with periodic review - not a one-time setup task forgotten once the connection works. The security implication of getting this wrong is significant: an overly broad or misconfigured trust relationship can let a compromised or misused hub session reach a backend with more privilege than intended, or obscure who actually performed an action by masking it behind a generic technical identity, undermining both least-privilege and the individual accountability that the entire authorization model is built on.",
+    "followUps": [
+      "How would you detect an overly broad trust relationship that's already in place in an existing landscape?",
+      "What would you monitor to catch a trust relationship being misused after initial setup?"
+    ],
+    "commonMistakes": [
+      "Using a shared stored-credential RFC destination instead of trusted RFC or principal propagation for user-facing traffic",
+      "Treating trust configuration as a one-time technical setup rather than an ongoing governed control"
+    ],
+    "tcodes": [
+      "SM59",
+      "SMT1",
+      "/IWFND/MAINT_SERVICE"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_RFC",
+      "S_RFCACL"
+    ],
+    "scenario": "A security review finds a Gateway hub connects to three backend systems using a single shared RFC destination with stored generic credentials, rather than trusted, user-specific propagation.",
+    "diagram": "flowchart TD\n  Hub[Gateway Hub] -->|Trusted RFC / Principal Propagation - User Identity Preserved| BE1[Backend 1]\n  Hub -->|Trusted RFC / Principal Propagation - User Identity Preserved| BE2[Backend 2]\n  Hub -.Shared Stored Credential - Identity Lost.-> BE3[Backend 3]\n  style BE3 fill:#f96",
+    "tags": [
+      "Architecture",
+      "RFC Trust"
+    ]
+  },
+  {
+    "id": "gw-q8",
+    "category": "gateway-security",
+    "difficulty": "Hard",
+    "question": "The same OData service works correctly against one backend but fails when the identical catalog/service is called against a second backend through a different system alias. How do you troubleshoot this?",
+    "hints": [
+      "Think about whether the service definition itself is shared but the alias-to-destination mapping differs",
+      "Consider default versus local system alias configuration"
+    ],
+    "expectedAnswer": "Check the system alias mapping in /IWFND/MAINT_SERVICE for the second backend specifically, since the same service metadata can be mapped to a different (or missing/misconfigured) RFC destination per alias - the service definition being shared doesn't guarantee the alias-to-destination wiring is correct or complete for every backend it's meant to serve.",
+    "detailedAnswer": "A single OData service definition can be exposed against multiple backends through different system alias mappings, each pointing to its own RFC destination - the service's metadata and implementation are shared, but the actual backend it executes against for a given call depends entirely on which alias was used to invoke it. When the same service works against one backend but fails against a second, the first things to check are: whether the second backend actually has a system alias entry configured for this service at all (versus relying on an incomplete default alias assumption), whether that alias's RFC destination correctly points to and authenticates against the intended second backend, and whether the second backend has the corresponding business authorization objects and roles provisioned - since a service being technically reachable via its alias doesn't guarantee the backend-side authorization setup was replicated when the service was extended to a new backend. This is a common gap when a service is initially built and tested against one backend, then later extended to additional backends without a checklist ensuring both the alias/destination wiring and the backend authorization objects are set up consistently each time.",
+    "followUps": [
+      "What would you check first if the alias mapping looks correct but the failure persists?",
+      "How would you build a repeatable checklist for extending an existing service to a new backend without missing a step?"
+    ],
+    "commonMistakes": [
+      "Assuming the service definition being shared means the backend wiring and authorization setup are automatically consistent across backends",
+      "Not checking whether the second backend even has an alias entry before investigating authorization data"
+    ],
+    "tcodes": [
+      "/IWFND/MAINT_SERVICE",
+      "SM59"
+    ],
+    "tables": [],
+    "authObjects": [],
+    "scenario": "A finance reporting app extended from one regional backend to a second region fails immediately for all second-region users, while continuing to work fine for the original region.",
+    "tags": [
+      "System Alias",
+      "Troubleshooting"
+    ]
+  },
+  {
+    "id": "gw-q9",
+    "category": "gateway-security",
+    "difficulty": "Manager",
+    "question": "How would you govern which OData services get whitelisted for external/internet-facing exposure versus kept internal-only, balancing business self-service demand against attack surface growth?",
+    "hints": [
+      "Think about a lightweight risk-based approval tier rather than a single blanket policy",
+      "Consider who actually owns the decision and what criteria they use"
+    ],
+    "expectedAnswer": "Establish a tiered approval process where internal-only service activation is relatively lightweight and self-service, while any request for external/internet-facing exposure goes through a specific security risk review evaluating data sensitivity, authentication strength, and monitoring coverage before approval - avoiding both a bottleneck on routine internal needs and an ungoverned expansion of external attack surface.",
+    "detailedAnswer": "Treating every service activation request identically - either uniformly slow and bureaucratic or uniformly fast and unreviewed - fails in opposite ways: uniform bureaucracy frustrates legitimate internal business needs and encourages workarounds, while uniform fast-tracking lets external-facing attack surface grow without anyone deliberately assessing the risk. The workable model tiers the approval: internal-only service activation follows a lightweight, largely self-service process since the exposure risk is bounded by the corporate network perimeter, while any request to expose a service externally (to partners, mobile users outside the network, or public-facing scenarios) triggers a specific, mandatory security review assessing data sensitivity, authentication mechanism strength, rate limiting/monitoring coverage, and whether an API management/reverse proxy layer sits in front of it - with a named owner (typically security architecture) accountable for that approval, not a rubber stamp. This keeps routine internal work moving quickly while ensuring the genuinely higher-risk decision - what's reachable from outside the corporate perimeter - gets deliberate, documented scrutiny every time.",
+    "followUps": [
+      "How would you retroactively review services that were already exposed externally before this governance process existed?",
+      "What metrics would tell you the tiered process is working rather than just adding friction?"
+    ],
+    "commonMistakes": [
+      "Applying the same approval rigor to internal and external exposure requests, either over- or under-governing one of them",
+      "Not assigning clear accountability for the external exposure approval decision"
+    ],
+    "tcodes": [
+      "/IWFND/MAINT_SERVICE"
+    ],
+    "tables": [],
+    "authObjects": [],
+    "scenario": "A business unit wants to fast-track exposing a new partner-facing OData service externally using the same lightweight process currently used for internal service activation requests.",
+    "tags": [
+      "Governance",
+      "Leadership",
+      "External Exposure"
+    ]
+  },
+  {
+    "id": "gw-q10",
+    "category": "gateway-security",
+    "difficulty": "Principal Architect",
+    "question": "Design an end-to-end security architecture for exposing SAP data to external partners via APIs built on top of a Gateway hub.",
+    "hints": [
+      "Think in layers: perimeter/API management, authentication/identity, Gateway-level controls, and backend authorization",
+      "Consider that no single layer should be the only thing preventing unauthorized access"
+    ],
+    "expectedAnswer": "Layer the architecture so no single control is the sole line of defense: an API Management/reverse proxy layer at the perimeter handling rate limiting, IP allow-listing, and coarse request validation; strong partner authentication (OAuth2 client credentials or certificate-based) terminating at that layer; a tightly whitelisted set of Gateway services exposed only for the specific partner use case; and full backend authorization (classic objects/DCL) still enforced as the final layer regardless of what already passed through the perimeter.",
+    "detailedAnswer": "External partner API exposure demands defense in depth precisely because the consumer is outside the corporate network and outside direct organizational control. The outermost layer is an API Management platform or reverse proxy handling partner authentication (OAuth2 client credentials flow or mutual TLS/certificate-based authentication is preferable to shared static API keys), rate limiting to prevent abuse, and IP allow-listing where the partner's network topology allows it - this layer's job is to reject as much illegitimate traffic as possible before it ever reaches the Gateway hub. Behind that, the Gateway hub itself exposes only a tightly whitelisted, minimal set of services scoped specifically to what the partner integration requires - never the full internal service catalog - configured through /IWFND/MAINT_SERVICE as a deliberate allow-list. Critically, the backend systems' own classic authorization objects and DCL-based row-level security must remain fully enforced as the final layer regardless of what already passed through the perimeter and Gateway layers - the architecture should never rely on the perimeter or Gateway whitelisting alone to be the only thing standing between the partner and unauthorized data, since any single layer can eventually be misconfigured or bypassed. Monitoring and alerting should span all three layers, since a partner integration behaving anomalously might first show up as unusual API Management traffic patterns long before it manifests as a backend authorization failure.",
+    "followUps": [
+      "How would you handle a partner integration that legitimately needs broader data access than your standard whitelisting model typically allows?",
+      "What would you monitor at each layer to detect a partner credential compromise early?"
+    ],
+    "commonMistakes": [
+      "Relying on the perimeter/API Management layer as the sole control and assuming backend authorization is redundant for external traffic",
+      "Exposing the full internal service catalog to a partner rather than a purpose-built minimal whitelist"
+    ],
+    "tcodes": [
+      "/IWFND/MAINT_SERVICE",
+      "SICF"
+    ],
+    "tables": [],
+    "authObjects": [
+      "S_SERVICE"
+    ],
+    "scenario": "A manufacturer needs to expose order status and inventory availability data to three external logistics partners via API, with a mandate from the CISO for a defensible, layered security architecture.",
+    "diagram": "flowchart LR\n  Partner[External Partner] --> APIM[API Management / Reverse Proxy: Auth, Rate Limit, IP Allow-list]\n  APIM --> GW[Gateway Hub: Whitelisted Service Subset]\n  GW --> BE[Backend: Classic Authorization + DCL Enforced]\n  BE --> Data[(Business Data)]",
+    "tags": [
+      "Architecture",
+      "API Security"
+    ]
+  },
+  {
+    "id": "gw-q11",
+    "category": "gateway-security",
+    "difficulty": "Hard",
+    "question": "How do authorization checks and record locking interact within a $batch changeset, and what's the risk of a changeset operation failing silently without a proper error surfacing to the UI?",
+    "hints": [
+      "Think about when in the changeset's execution the authorization check happens relative to acquiring a lock",
+      "Consider what 'silent' failure actually looks like at the protocol level"
+    ],
+    "expectedAnswer": "Each operation within a changeset still undergoes its own authorization check and normal SAP locking behavior as it executes; if one operation fails authorization partway through a multi-operation changeset, the whole changeset should roll back, but the specific risk is a poorly-implemented service or client that reports only the outer batch-level success/failure and doesn't surface the embedded per-part error detail, leading the UI to report success when part of the intended change never actually happened.",
+    "detailedAnswer": "Within a changeset, each individual operation still goes through the same authorization evaluation and standard SAP enqueue/lock mechanics it would if called independently - grouping operations into a changeset for atomicity doesn't bypass or batch these checks together; if one operation's AUTHORITY-CHECK or DCL filter fails partway through, the entire changeset is intended to roll back so the backend doesn't end up in a partially-applied state. The real risk isn't in the backend's atomicity guarantee itself, which is generally reliable, but in how the multipart response is consumed: the outer $batch HTTP response can report a generic success while the embedded response for the failed changeset carries the actual error detail buried in the multipart body - if the calling application's error handling only inspects the top-level status code and doesn't parse each embedded part's response, it can report a successful save to the end user when the changeset actually rolled back and nothing was persisted. This is a client-side implementation risk more than a Gateway framework flaw, but it's a very common one, and a support ticket describing 'the system said it saved but the data isn't there' is a strong signal to go look at exactly this pattern.",
+    "followUps": [
+      "How would you test an app's error handling specifically for this embedded-failure-with-outer-success pattern?",
+      "What would you change about a service's client-side implementation to eliminate this risk?"
+    ],
+    "commonMistakes": [
+      "Assuming the backend's atomicity guarantee means the application layer doesn't also need to correctly parse embedded batch part responses",
+      "Only testing the happy path for $batch operations and never a deliberately failing changeset"
+    ],
+    "tcodes": [
+      "/IWFND/GW_CLIENT",
+      "/IWFND/ERROR_LOG"
+    ],
+    "tables": [],
+    "authObjects": [],
+    "scenario": "A user insists they successfully saved a multi-line document update, but a follow-up check shows only some of the lines were actually persisted in the backend.",
+    "tags": [
+      "$batch",
+      "Troubleshooting",
+      "OData"
+    ]
+  }
+]

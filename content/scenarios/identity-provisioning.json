@@ -1,0 +1,88 @@
+[
+  {
+    "id": "ips-s1",
+    "category": "identity-provisioning",
+    "title": "New hires silently missing from a target application despite clean IPS job logs",
+    "difficulty": "Hard",
+    "situation": "Multiple new hires in a specific business unit report they have no access to a BTP-hosted application weeks after their start date, even though the IPS job log for the HR-to-IAS-to-application sync chain shows no errors during that period.",
+    "troubleshootingSteps": [
+      "Confirm the affected users are actually present and active in the upstream HR source system with the expected attribute values.",
+      "Pull the exact inclusion and exclusion filter expressions configured on the specific IPS job feeding the affected application.",
+      "Manually evaluate the affected users' actual source attribute values (department, employee subgroup, cost center) against each filter condition to check for a silent exclusion match.",
+      "Check whether the business unit recently underwent an attribute value change (e.g., a new cost center code introduced during a reorg) that the filter logic was never updated to include.",
+      "Correct the filter expression to include the new attribute value, then manually trigger a delta or full sync to catch up the previously excluded users.",
+      "Search for any other users who may share the same newly introduced attribute value and have been silently excluded, not just the reported cases."
+    ],
+    "toolsUsed": ["IPS Admin Console job configuration", "IPS job logs", "HR source system attribute export"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The IPS job's inclusion filter was written against a specific cost center code that did not include a newly introduced code created during a business unit reorganization, silently excluding every employee assigned to the new code with no error logged since filter exclusion is not treated as a failure.",
+    "resolution": "Updated the filter expression to include the new cost center code, triggered a catch-up sync for all previously excluded users, and searched for other silently excluded users sharing the same gap.",
+    "preventiveMeasures": ["Establish a change-notification process so IPS filter configurations are reviewed whenever HR attribute values change due to reorgs", "Build a periodic reconciliation report comparing the HR source population that should be in scope against what's actually present in each target, independent of job log status", "Document all filter logic clearly with the business rationale for each inclusion/exclusion condition"],
+    "diagram": "flowchart TD\n  A[HR Source: New Cost Center Created] --> B[IPS Job Filter: Old Cost Center List Only]\n  B -->|New Code Not Matched| C[User Silently Excluded]\n  C --> D[No Error in Job Log]\n  D --> E[User Reports No Access Weeks Later]"
+  },
+  {
+    "id": "ips-s2",
+    "category": "identity-provisioning",
+    "title": "Nightly IPS batch job aborts entirely due to a single malformed HR record",
+    "difficulty": "Medium",
+    "situation": "The nightly IPS synchronization job from the HR source system to IAS failed entirely overnight, meaning no users - joiners, movers, or leavers - were processed at all, discovered only when a manager reported a new hire had no access the next morning.",
+    "troubleshootingSteps": [
+      "Review the job log to identify the exact record and error that caused the job to abort rather than skip and continue.",
+      "Confirm whether the job is configured to fail the entire batch on any single record error, or whether this was an unexpected systemic issue instead.",
+      "Isolate the specific malformed record's data (likely a missing required field or invalid format) and correct it at the source, or add defensive handling in the mapping configuration.",
+      "Manually trigger a re-run of the job once the malformed record is fixed or excluded, and verify all pending joiner/mover/leaver events from the missed cycle are now processed.",
+      "Check specifically whether any terminations were due to be processed in the missed cycle, since a delayed deactivation is a higher-severity exposure than a delayed new-hire grant.",
+      "Reconfigure the job's error handling to process valid records independently rather than aborting the entire batch on a single bad record."
+    ],
+    "toolsUsed": ["IPS job logs", "IPS Admin Console job configuration", "HR source system record export"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The IPS job was configured with fail-closed batch behavior where any single record validation error aborted the entire job run, and a new hire record with a missing required attribute triggered that abort, blocking all other pending joiner, mover, and leaver events for the entire cycle.",
+    "resolution": "Corrected the malformed record's source data, manually re-ran the job to process the full backlog, and reconfigured the job to skip and log individual record errors rather than aborting the whole batch.",
+    "preventiveMeasures": ["Reconfigure IPS jobs to process records independently rather than all-or-nothing per batch", "Add active alerting on any skipped/errored record rather than relying on someone noticing a missing job run", "Add source-side data validation at HR record creation time to catch missing required fields before they reach IPS"]
+  },
+  {
+    "id": "ips-s3",
+    "category": "identity-provisioning",
+    "title": "Deactivated account in target system still shows active API usage",
+    "difficulty": "Hard",
+    "situation": "A terminated employee's user account was confirmed deactivated in a downstream cloud application within the expected SLA window via IPS, but security monitoring detected continued API activity under that identity's credentials for several hours after deactivation.",
+    "troubleshootingSteps": [
+      "Confirm the account's active status flag in the target application to verify IPS's deactivation call actually succeeded and was correctly reflected.",
+      "Check whether the target application enforces active-status checks on every API request or only at initial token issuance/session establishment.",
+      "If tokens were issued before deactivation, determine the token's remaining validity lifetime and whether the application has any mechanism to proactively revoke already-issued tokens.",
+      "Cross-check with the identity/OAuth layer (e.g., XSUAA or the target's own token issuer) whether a refresh token was also issued and whether it was separately revoked.",
+      "Work with the application team to implement or enable active status re-validation on each request, or reduce token validity for this application, closing the gap.",
+      "Document the exposure window observed for this application and assess whether other downstream targets have the same architectural gap."
+    ],
+    "toolsUsed": ["Target application audit logs", "IPS job logs", "Token/session management console"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The target application only validated account active status at token issuance time, not on every subsequent API call, so the already-issued access token remained fully valid and usable for its full remaining lifetime even after the account was correctly marked inactive by IPS.",
+    "resolution": "Enabled active-status re-validation on each API request for the affected application and reduced its access token validity window, and reviewed the same architectural pattern across other downstream targets.",
+    "preventiveMeasures": ["Require every downstream target onboarded to IPS to document its actual session/token revocation behavior on deactivation, not just its account state handling", "Prefer shorter token lifetimes for applications holding sensitive data", "Add a security control testing account deactivation effectiveness (not just account state) as part of periodic access review"],
+    "diagram": "sequenceDiagram\n  participant HR as HR Source\n  participant IPS\n  participant App as Target Application\n  HR->>IPS: Termination Event\n  IPS->>App: Deactivate Account (SCIM PATCH active=false)\n  App-->>IPS: Success\n  Note over App: Existing Access Token Still Valid\n  App->>App: Token validated by signature+expiry only\n  Note over App: API Activity Continues Until Token Expiry"
+  },
+  {
+    "id": "ips-s4",
+    "category": "identity-provisioning",
+    "title": "Duplicate user records created after onboarding a new target system",
+    "difficulty": "Medium",
+    "situation": "Shortly after a new downstream application was onboarded to the existing IPS landscape, the application began showing duplicate user records for a subset of employees, each with slightly different attribute values and no clear indication which record IPS considers authoritative.",
+    "troubleshootingSteps": [
+      "Identify the identifier/correlation attribute configured in the new job's attribute mapping used to match source users to existing target records.",
+      "Verify whether that identifier attribute is actually guaranteed unique and stable in the source system for the affected users.",
+      "Compare the duplicate records' creation timestamps against IPS job run history to confirm they were created by separate sync cycles rather than a target-side issue.",
+      "Determine whether the mapped identifier value changed for the affected users between sync cycles (e.g., a username format change), causing IPS to treat them as new users rather than matching existing records.",
+      "Correct the mapping to use a genuinely stable, unique identifier attribute, and manually merge or remove the duplicate records in the target application.",
+      "Re-run the job against the corrected mapping and confirm no new duplicates are created going forward."
+    ],
+    "toolsUsed": ["IPS Admin Console job configuration", "Target application user administration", "IPS job run history"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The new job's attribute mapping used a non-stable identifier attribute for user correlation, which changed value for a subset of users between sync cycles, causing IPS to create new user records instead of updating the existing ones it could no longer match.",
+    "resolution": "Reconfigured the job to correlate users on a genuinely stable, unique identifier, manually deduplicated the affected records in the target application, and validated the fix with a dry run before re-enabling the live schedule.",
+    "preventiveMeasures": ["Always validate identifier/correlation attribute stability and uniqueness during new target onboarding, before go-live", "Use IPS's simulation/dry-run mode against real data before enabling any new job in production", "Add a periodic duplicate-detection check for all IPS-managed targets"]
+  }
+]

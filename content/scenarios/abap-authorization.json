@@ -1,0 +1,129 @@
+[
+  {
+    "id": "abap-s1",
+    "category": "abap-authorization",
+    "title": "Orphaned Derived Role Copy Never Inherits Future Master Role Changes",
+    "difficulty": "Hard",
+    "situation": "A shared-service accounting team spanning 12 plants has 11 correctly functioning derived roles. A 12th plant, added mid-year for a new acquisition, initially worked fine, but three months later, when the master role received a new custom transaction, all 11 original derived roles picked it up automatically after mass generation - the 12th did not, despite being included in the same mass generation run.",
+    "troubleshootingSteps": [
+      "Confirm via PFCG that the 12th derived role's authorization tab genuinely lacks the new transaction while others have it.",
+      "Check the derived role's 'Derive From' relationship in PFCG to confirm whether it's actually still linked to the master role.",
+      "Compare the role's creation history against the other 11 derived roles - when and how each was created.",
+      "Review the mass generation job log to confirm the 12th role was actually included in the run, not skipped.",
+      "Check table AGR_AGRS, which tracks the derivation relationship between master and derived roles, for the 12th role's entry."
+    ],
+    "toolsUsed": ["PFCG", "SE16N"],
+    "tablesChecked": ["AGR_AGRS", "AGR_DEFINE", "AGR_1251"],
+    "authObjects": [],
+    "rootCause": "When the new plant/acquisition role was created under project time pressure, the consultant copied an existing derived role via 'Save As' instead of creating a proper new derived role through the master role's 'Create Derived Roles' function. The copy carried over the correct authorization values at that point in time, so it functioned identically to a real derived role initially, but it had no actual entry in AGR_AGRS linking it to the master - it was a structurally independent single role that merely resembled a derived role. Because mass generation and the 'Adjust Derived Roles' propagation mechanism both operate off the AGR_AGRS relationship, this role was silently excluded from ever receiving future master role changes.",
+    "resolution": "Created a genuine derived role from the master role for the 12th plant, migrated the correct org-level values, reassigned affected users, and decommissioned the orphaned copy after confirming no other users depended on it. Audited the rest of the role landscape for any other roles created via copy-instead-of-derive to catch similar latent gaps before they surfaced.",
+    "preventiveMeasures": [
+      "Prohibit 'Save As' as a method for creating what should be a derived role; enforce role creation only through the proper master-role derivation function.",
+      "Add a periodic reconciliation check comparing every role that should be derived against its actual AGR_AGRS relationship, catching orphaned copies proactively.",
+      "Include a role governance checklist item during any project-driven role creation confirming the correct creation method was used, not just that the resulting authorizations look correct at that moment."
+    ],
+    "relatedQuestionIds": ["abap-q3", "abap-q8"],
+    "diagram": "flowchart TD\n  A[Consultant Copies Existing Derived Role via Save As] --> B[New Role Has Correct Authorizations at Creation Time]\n  B --> C[No Entry Created in AGR_AGRS]\n  C --> D[Role Looks Identical to a Real Derived Role]\n  D --> E[Master Role Later Changed]\n  E --> F[Mass Generation Propagates via AGR_AGRS Relationship]\n  F --> G[Orphaned Copy Silently Excluded - Not Linked to Master]"
+  },
+  {
+    "id": "abap-s2",
+    "category": "abap-authorization",
+    "title": "SU24 Proposal Missing Because the AUTHORITY-CHECK Lives in a Background-Only Code Path",
+    "difficulty": "Medium",
+    "situation": "A custom Z-transaction was added to a role, but PFCG proposed zero authorization objects for it. The developer confirms the transaction's main program does perform an AUTHORITY-CHECK, so the security team can't understand why SU24 shows no proposal at all.",
+    "troubleshootingSteps": [
+      "Confirm the transaction's SU24 entry status - check whether it shows as 'Unmaintained' rather than having any check indicator set.",
+      "Review the ABAP source to locate every AUTHORITY-CHECK statement and identify exactly which code path each one sits in.",
+      "Determine whether the AUTHORITY-CHECK the developer pointed to is only reached via a specific processing branch, such as a background/batch variant, rather than the standard foreground execution path.",
+      "Check whether SU24 proposals were ever generated via a usage/trace-based process, and whether that trace exercised the background code path at all.",
+      "Manually add the missing authorization object to the role and to the SU24 proposal table for the transaction once confirmed."
+    ],
+    "toolsUsed": ["SU24", "SE38", "ST01"],
+    "tablesChecked": ["USOBX_C", "USOBT_C"],
+    "authObjects": [],
+    "rootCause": "SU24 proposals for custom transactions are typically populated either by manual maintenance or by a trace-based generation process capturing which authorization checks actually execute during representative usage. The AUTHORITY-CHECK the developer referenced was located inside a function module only called when the transaction ran in a specific background/batch mode, a code path that was never exercised during the original trace-based SU24 setup, which only covered standard foreground execution. As a result, the object was genuinely checked in the code but had no SU24 entry at all - the 'Unmaintained' state - so PFCG had nothing to propose.",
+    "resolution": "Manually maintained the missing object in SU24 with the correct check indicator, added it to the role's authorization data, and re-tested both the foreground and background execution paths to confirm no other checks were similarly missed.",
+    "preventiveMeasures": [
+      "When generating SU24 proposals via trace for any custom transaction, explicitly exercise every distinct execution mode (foreground, background/batch, any BAdI-driven variant), not just the default happy path.",
+      "Require developers to document every AUTHORITY-CHECK statement and the conditions under which each executes as part of the technical specification for new Z-transactions.",
+      "Periodically re-verify SU24 completeness for custom transactions against actual code, not just assume initial setup remains accurate as the program evolves."
+    ],
+    "relatedQuestionIds": ["abap-q2"]
+  },
+  {
+    "id": "abap-s3",
+    "category": "abap-authorization",
+    "title": "SU24 Check Indicator Inconsistent Across Landscape Due to a Missed Customizing Transport",
+    "difficulty": "Medium",
+    "situation": "A role behaves correctly in development and QA - a specific custom authorization object is proposed and enforced as expected - but the same role in production shows the object with no proposal at all, and the transaction can be executed without the expected restriction.",
+    "troubleshootingSteps": [
+      "Compare the SU24 check indicator for the transaction/object pair across DEV, QA, and PROD directly.",
+      "Confirm the SU24 change was actually captured in a transport request when originally made in development.",
+      "Check the transport request's object list to confirm whether the SU24 customizing entries were included alongside the role transport, since these are separate object types.",
+      "Review the transport import log in QA and PROD to confirm the SU24 customizing request was actually imported, not just the role transport.",
+      "Re-run SU25 comparison in production to identify any other SU24 entries that may have similarly failed to propagate."
+    ],
+    "toolsUsed": ["SU24", "SE01", "SE09"],
+    "tablesChecked": ["USOBX_C", "USOBT_C"],
+    "authObjects": [],
+    "rootCause": "SU24 check indicator changes are captured in a separate customizing transport request from the PFCG role transport itself. When the change was originally made in development, the consultant transported the role but the SU24 customizing request was left sitting in a different, unreleased transport, an easy mistake since both changes were made in the same work session and appeared complete locally. QA happened to have the correct indicator because a tester had manually adjusted it directly in QA during earlier testing without realizing it needed to also come through the transport, masking the gap until production, which never received either the original transport or the manual QA workaround.",
+    "resolution": "Released and imported the outstanding SU24 customizing transport into production, validated the check indicator matched across all three systems, and re-generated the affected role in production to ensure the authorization was properly enforced.",
+    "preventiveMeasures": [
+      "Establish a standard practice of transporting SU24 customizing changes and their associated role changes together, verified as a matched pair before release.",
+      "Prohibit direct manual SU24 changes in QA as a 'fix' without a corresponding transport, since it creates a false sense that the change has propagated when it hasn't.",
+      "Run SU25 comparison checks as part of the standard pre-go-live checklist across all systems in the landscape, not just production, to catch cross-system inconsistencies before they reach the top of the landscape."
+    ],
+    "relatedQuestionIds": ["abap-q2", "abap-q4"],
+    "diagram": "flowchart TD\n  A[SU24 Change Made in DEV] --> B[Role Transport Released]\n  A --> C[SU24 Customizing Transport Left Unreleased]\n  B --> D[QA: Role Imported]\n  D --> E[QA Tester Manually Fixes SU24 Locally]\n  E --> F[QA Looks Correct - Masks the Gap]\n  C -.never imported.-> G[Production: Missing Check Indicator]\n  B --> G\n  G --> H[Transaction Executes Without Expected Restriction]"
+  },
+  {
+    "id": "abap-s4",
+    "category": "abap-authorization",
+    "title": "Mass Role Regeneration Job Fails Partway Due to Concurrent Transport Import Lock",
+    "difficulty": "Hard",
+    "situation": "A scheduled mass regeneration job (RHAUTUPD_NEW) covering 200 derived roles after a master role change completes with a partial success status. Roughly 30 roles show a 'profile not current' red status afterward, with no obvious pattern to which ones failed.",
+    "troubleshootingSteps": [
+      "Review the mass generation job log to identify the specific point of failure and any error messages for the affected roles.",
+      "Check whether a transport import was running concurrently in the same system during the mass generation window.",
+      "Confirm whether the affected roles cluster around the exact timeframe the transport import held table locks on role-related tables.",
+      "Attempt to manually regenerate a sample of the failed roles individually to confirm whether the underlying authorization data is actually correct and it's purely a generation-status issue.",
+      "Check the system log (SM21) for lock wait timeouts or enqueue conflicts during the job's execution window."
+    ],
+    "toolsUsed": ["PFCG", "SM37", "SM21", "SE01"],
+    "tablesChecked": ["AGR_1251", "AGR_TCODES"],
+    "authObjects": [],
+    "rootCause": "A scheduled transport import job for an unrelated change ran concurrently with the mass role regeneration, and both processes required exclusive locks on overlapping role-related tables during profile generation. Roughly 30 roles hit lock timeouts mid-generation when the transport import held the lock first, leaving those roles in a half-generated, inconsistent state (definition updated but profile generation incomplete) while the other 170 roles, whose generation windows didn't overlap with the lock, completed successfully.",
+    "resolution": "Re-ran mass generation for the specific 30 affected roles outside any transport import window, confirming successful completion and a clean status for all. Verified no user-facing authorization gaps had resulted, since the affected roles' previous profile versions remained in place and usable until regeneration completed.",
+    "preventiveMeasures": [
+      "Schedule mass role regeneration jobs in a dedicated maintenance window with no concurrent transport imports permitted, coordinated with the Basis transport calendar.",
+      "Add automated status validation after any mass generation run, alerting on any role left in a non-current profile status rather than assuming a 'partial success' job result requires no follow-up.",
+      "Document this failure mode in the team's operational runbook so a future partial-success mass generation is immediately recognized as a likely lock-contention issue rather than triggering a fresh investigation from scratch."
+    ],
+    "relatedQuestionIds": ["abap-q4", "abap-q8"]
+  },
+  {
+    "id": "abap-s5",
+    "category": "abap-authorization",
+    "title": "Plant Renumbering Mass Maintenance Missed One Non-Contiguous Value",
+    "difficulty": "Medium",
+    "situation": "As part of a plant renumbering project, org-level values across dozens of derived roles were mass-updated from old to new plant codes using a mapping spreadsheet and LSMW-based mass maintenance. Weeks later, a small group of users at one specific plant report they can no longer execute previously-working transactions, despite their derived role showing a 'green' generated status in PFCG.",
+    "troubleshootingSteps": [
+      "Confirm via SU53/STAUTHTRACE which specific authorization object and org-level value is failing for the affected users.",
+      "Compare the derived role's actual org-level field values in PFCG against the plant renumbering mapping spreadsheet used for the mass update.",
+      "Check whether the affected plant's old code was genuinely included as a row in the mapping spreadsheet used to drive the mass maintenance.",
+      "Confirm the mass maintenance transaction's execution log to see whether this specific role/value combination was processed at all or silently skipped due to a lookup mismatch.",
+      "Cross-check the org value currently in the role against both the old and new plant code to determine whether it was left unchanged, entered incorrectly, or removed entirely."
+    ],
+    "toolsUsed": ["STAUTHTRACE", "PFCG", "SE16N"],
+    "tablesChecked": ["AGR_1251"],
+    "authObjects": [],
+    "rootCause": "The plant in question had a non-contiguous, non-standard old plant code that didn't follow the numbering pattern most rows in the mapping spreadsheet used; a lookup formula in the spreadsheet used a pattern-based range match rather than an explicit one-to-one mapping for every plant, and this specific plant fell outside the pattern and was silently excluded from the mass update. The derived role retained its old, now-invalid plant code, which generated successfully (a role can generate cleanly with a stale but structurally valid org value) but no longer matched any value users' actual master data reflected, producing an authorization failure that looked identical to a role generation problem.",
+    "resolution": "Manually corrected the org-level value for the affected role to the correct new plant code, regenerated, and re-validated user access. Audited the full mapping spreadsheet against the complete authoritative plant master list to confirm no other non-contiguous codes had been similarly missed.",
+    "preventiveMeasures": [
+      "Use an explicit one-to-one mapping table validated against the authoritative master data list for any mass org-value maintenance, rather than pattern/range-based lookups that assume contiguous numbering.",
+      "Add a post-mass-maintenance reconciliation step comparing the full 'before' and 'after' org-value population counts against the expected total, to catch silent exclusions rather than assuming a clean job completion means full coverage.",
+      "Treat a 'green' PFCG generation status as confirmation the role generated successfully, not as confirmation the underlying org-level values are actually correct - these are independent checks."
+    ],
+    "relatedQuestionIds": ["abap-q3", "abap-q8"]
+  }
+]

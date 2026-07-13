@@ -1,0 +1,109 @@
+[
+  {
+    "id": "net-s1",
+    "category": "network-transport-security",
+    "title": "Discovering an Empty Gateway ACL During a Security Assessment",
+    "difficulty": "Hard",
+    "situation": "A security assessment for a manufacturing client finds a production system's gateway secinfo file is essentially empty, meaning default permissive behavior applies and any host on the internal network could register arbitrary RFC server programs.",
+    "troubleshootingSteps": [
+      "Confirm the current secinfo/reginfo file contents via SMGW and validate the default-permissive behavior is actually in effect.",
+      "Inventory every legitimate RFC server program and calling host currently interacting with this gateway to avoid breaking them during remediation.",
+      "Draft a restrictive secinfo/reginfo configuration allowlisting only the confirmed legitimate programs and hosts.",
+      "Test the draft configuration extensively in a non-production system mirroring the same interfaces.",
+      "Roll out the restrictive configuration to production in a staged, monitored window, watching for any unexpected rejection of legitimate traffic.",
+      "Formally document the new baseline and add periodic review to prevent future drift back toward permissive defaults."
+    ],
+    "toolsUsed": ["SMGW", "Gateway access control logs", "Interface inventory documentation"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The gateway ACL files were never configured with restrictive entries after initial system setup, leaving default permissive behavior in place for years - a gap entirely invisible to prior security reviews that focused only on PFCG role design.",
+    "resolution": "Implemented a carefully tested, restrictive secinfo/reginfo configuration allowlisting only confirmed legitimate RFC programs and hosts, following SAP's documented secure-by-default gateway configuration guidance, after staged non-production validation.",
+    "preventiveMeasures": ["Include gateway ACL configuration review as a mandatory item in every SAP security assessment, not only PFCG/role review", "Establish a periodic review cycle re-validating gateway ACL configuration hasn't drifted back toward permissive defaults", "Document the legitimate interface inventory as a living artifact to speed future ACL changes"]
+  },
+  {
+    "id": "net-s2",
+    "category": "network-transport-security",
+    "title": "Legitimate Interface Blocked After Gateway ACL Tightening",
+    "difficulty": "Medium",
+    "situation": "Immediately after a scheduled gateway ACL hardening change goes live in production, a decade-old middleware integration interface stops working, generating urgent escalations from the business team relying on it.",
+    "troubleshootingSteps": [
+      "Confirm the failure timing correlates precisely with the ACL hardening change window rather than an unrelated cause.",
+      "Review the gateway's rejection/access control log via SMGW to identify the exact blocked program and host.",
+      "Confirm this interface's technical requirements against current documentation, or reconstruct them if undocumented.",
+      "Add a precisely scoped allowlist entry for this specific legitimate program/host rather than reverting the broader ACL hardening.",
+      "Retest the interface end-to-end to confirm restored functionality.",
+      "Update the interface inventory to prevent this gap from recurring in future ACL changes."
+    ],
+    "toolsUsed": ["SMGW", "Gateway access control logs"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The decade-old middleware interface was undocumented and missing from the pre-hardening interface inventory, so it was not included in the new restrictive gateway ACL allowlist.",
+    "resolution": "Added a precisely scoped secinfo/reginfo entry for the specific legitimate program and host, restoring the interface without reverting the overall ACL hardening improvement.",
+    "preventiveMeasures": ["Build and maintain a complete, current interface inventory before any future gateway ACL tightening project", "Stage ACL changes through non-production validation against all known interfaces before production rollout", "Treat undocumented legacy interfaces discovered this way as a signal to formally document them going forward"],
+    "diagram": "flowchart LR\n  A[Gateway ACL Hardening Deployed] --> B{Interface in Pre-Hardening Inventory?}\n  B -->|Yes| C[Allowlisted - Continues Working]\n  B -->|No| D[Blocked - Legitimate Interface Breaks]\n  D --> E[Add Precisely Scoped Allowlist Entry]\n  E --> C"
+  },
+  {
+    "id": "net-s3",
+    "category": "network-transport-security",
+    "title": "Unexpected Cross-System Access via an Overly Broad Trusted RFC Relationship",
+    "difficulty": "Hard",
+    "situation": "During an incident investigation, a user is found to have performed actions in a production system despite never having any role or authorization assigned there directly, traced back to a trusted RFC relationship with another system.",
+    "troubleshootingSteps": [
+      "Confirm the user's direct role assignments in the affected system show no authorization for the observed actions.",
+      "Identify any trusted/trusting RFC relationship configured between this system and other systems in the landscape.",
+      "Review the S_RFCACL configuration on the trusting system to determine which calling systems and users are actually permitted to use the trust relationship.",
+      "Confirm whether S_RFCACL was configured too broadly, permitting the observed user (originating from the trusted system) to pass through without restriction.",
+      "Restrict S_RFCACL to only the specific calling systems and users with a genuine, documented business need for the trust relationship.",
+      "Audit for any other trust relationships in the landscape with similarly broad S_RFCACL configuration."
+    ],
+    "toolsUsed": ["SMT1", "SMT2", "SM59", "SU53/STAUTHTRACE (to rule out direct authorization)"],
+    "tablesChecked": [],
+    "authObjects": ["S_RFCACL"],
+    "rootCause": "The trusted/trusting RFC relationship between the two systems had no restrictive S_RFCACL configuration, allowing any user authenticated in the trusted system to act in the trusting system without holding any direct role or authorization there.",
+    "resolution": "Scoped S_RFCACL on the trusting system to explicitly restrict which calling system and specific users may use the trust relationship, eliminating the unintended broad pass-through access.",
+    "preventiveMeasures": ["Never configure a trusted/trusting RFC relationship without an explicit, narrowly scoped S_RFCACL restriction", "Include trust relationship configuration in standard periodic access reviews, not only direct role assignments", "Require documented business justification for every trust relationship at the time of configuration"]
+  },
+  {
+    "id": "net-s4",
+    "category": "network-transport-security",
+    "title": "Unauthorized Production Change Traced to a Bypassed Transport Approval Process",
+    "difficulty": "Architect",
+    "situation": "An audit discovers a production role change granting broad new access was never reviewed through the standard transport approval process, and investigation reveals it reached production through a transport route that bypassed the normal governance gate.",
+    "troubleshootingSteps": [
+      "Trace the specific transport request ID and confirm its actual approval history against the expected STMS workflow.",
+      "Identify which transport route or system landscape configuration allowed this transport to bypass the standard approval gate.",
+      "Determine whether this was a one-off misconfiguration or a systemic gap in the transport route/domain configuration.",
+      "Review other recent transports for the same bypass pattern to scope the full extent of unauthorized changes.",
+      "Correct the transport route/domain configuration to close the bypass and require all transports to pass through the standard approval gate.",
+      "Reverse or formally re-review the unauthorized role change through the correct approval process retroactively."
+    ],
+    "toolsUsed": ["STMS", "SE09/SE10 transport logs", "Transport domain configuration review"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "A transport route misconfiguration allowed a specific import path to bypass the standard STMS approval workflow, permitting a role change with broad new access to reach production without any review, including no security-specific check of the authorization-relevant content.",
+    "resolution": "Corrected the transport route configuration to eliminate the bypass path, retroactively reviewed the unauthorized change through the proper approval process, and reverted the broadened access pending formal justification.",
+    "preventiveMeasures": ["Periodically audit transport route/domain configuration for unintended bypass paths, not only the approval workflow itself", "Implement automated detection flagging any transport containing authorization-relevant objects (roles, SU24, DCL) for mandatory security review", "Treat transport governance as a security control requiring the same audit rigor as authorization design itself"]
+  },
+  {
+    "id": "net-s5",
+    "category": "network-transport-security",
+    "title": "One Protocol Left Unprotected After a Web Dispatcher-Only Hardening Effort",
+    "difficulty": "Medium",
+    "situation": "A landscape recently completed a thorough Web Dispatcher hardening project including HTTPS enforcement and URL filtering, yet a subsequent penetration test still finds significant exposure through classic SAP GUI/RFC access.",
+    "troubleshootingSteps": [
+      "Confirm the penetration test's findings specifically relate to classic RFC/DIAG protocol access rather than any HTTP(S)-based path already addressed.",
+      "Review the current SAProuter configuration and routing permission table (saprouttab) for restrictiveness.",
+      "Compare the level of rigor applied to SAProuter hardening against what was applied to Web Dispatcher during the recent project.",
+      "Identify the specific gap - typically an overly permissive or default saprouttab entry left unaddressed.",
+      "Draft and test a restrictive SAProuter routing configuration in non-production before applying to production.",
+      "Roll out the corrected SAProuter configuration and re-run the penetration test to confirm the gap is closed."
+    ],
+    "toolsUsed": ["SAProuter configuration (saprouttab)", "Penetration test findings report"],
+    "tablesChecked": [],
+    "authObjects": [],
+    "rootCause": "The recent hardening project scoped its work exclusively to Web Dispatcher and HTTP(S) traffic, leaving SAProuter's classic RFC/DIAG protocol configuration at its prior, more permissive state - the two components protect entirely different protocols, so hardening one provided no protection for the other.",
+    "resolution": "Extended the hardening effort to SAProuter, tightening the routing permission table to restrict classic RFC/DIAG access to only legitimate required paths, closing the protocol gap the penetration test identified.",
+    "preventiveMeasures": ["Explicitly scope any perimeter hardening project to cover both Web Dispatcher (HTTP/HTTPS) and SAProuter (RFC/DIAG) as distinct, mandatory workstreams", "Include both protocols in the acceptance criteria and penetration test scope before declaring a hardening project complete", "Document the protocol-specific responsibility split clearly so future projects don't repeat the single-protocol scoping mistake"],
+    "diagram": "flowchart TD\n  A[Hardening Project Scope] --> B[Web Dispatcher - HTTP/HTTPS]\n  A -.->|Not Included| C[SAProuter - RFC/DIAG]\n  B --> D[HTTP Path Secured]\n  C --> E[RFC/DIAG Path Still Exposed]\n  E --> F[Penetration Test Finding]\n  F --> G[Extend Hardening to SAProuter]"
+  }
+]

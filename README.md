@@ -84,6 +84,10 @@ The site is designed to grow purely by adding files — no code changes required
 
 After adding content, `npm run build` regenerates the search index and validates every page still builds statically — run it before committing.
 
+## Access Gate (Not Security)
+
+`components/access-gate.tsx` shows a passcode prompt (config in `lib/access-gate-config.ts`) before the site is used. **This is a cosmetic deterrent only, not an access control.** The site is a static export with no backend, so the passcode and hint answer ship in plain text in the public JS bundle and in this public repo's source — anyone can read or bypass them via browser dev tools in seconds. It exists purely to keep casual visitors from wandering in, not to protect anything confidential. To change the passcode/hint, edit `lib/access-gate-config.ts` and redeploy. To remove the gate entirely, delete the `<AccessGate>` wrapper in `app/layout.tsx`.
+
 ## Local Data & Privacy
 
 All personal state (progress, bookmarks, notes, quiz/mock-interview history, spaced-repetition schedule) is stored entirely in the browser's `localStorage` — there is no backend, no account system, and no data leaves the device. Use **Settings → Export Backup** to download a JSON snapshot, and **Import Backup** to restore it (e.g., when switching browsers/devices).

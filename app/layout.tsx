@@ -5,6 +5,7 @@ import { SidebarNav } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { MermaidHydrator } from "@/components/mermaid-hydrator";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { AccessGate } from "@/components/access-gate";
 
 export const metadata: Metadata = {
   title: {
@@ -32,18 +33,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <div className="flex min-h-screen">
-            <aside className="no-print sticky top-0 hidden h-screen w-64 shrink-0 border-r border-border lg:block">
-              <SidebarNav />
-            </aside>
-            <div className="flex min-w-0 flex-1 flex-col">
-              <Header />
-              <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
-              <footer className="no-print border-t border-border px-6 py-6 text-center text-xs text-muted-foreground">
-                SAP Security Architect Academy &mdash; Built for consultants, leads, and architects.
-              </footer>
+          <AccessGate>
+            <div className="flex min-h-screen">
+              <aside className="no-print sticky top-0 hidden h-screen w-64 shrink-0 border-r border-border lg:block">
+                <SidebarNav />
+              </aside>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <Header />
+                <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+                <footer className="no-print border-t border-border px-6 py-6 text-center text-xs text-muted-foreground">
+                  SAP Security Architect Academy &mdash; Built for consultants, leads, and architects.
+                </footer>
+              </div>
             </div>
-          </div>
+          </AccessGate>
           <MermaidHydrator />
           <ServiceWorkerRegister />
         </ThemeProvider>
